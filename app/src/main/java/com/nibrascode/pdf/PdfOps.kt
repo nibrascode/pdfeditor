@@ -37,13 +37,26 @@ class Hit(val page: Int, val rects: List<RectF>)
 object PdfOps {
     @Volatile
     private var inited = false
+    private var app: Context? = null
 
     fun init(ctx: Context) {
         if (!inited) {
+            app = ctx.applicationContext
             PDFBoxResourceLoader.init(ctx.applicationContext)
             inited = true
         }
     }
+
+    private fun loadFont(doc: PDDocument): com.tom_roush.pdfbox.pdmodel.font.PDType0Font? = try {
+        app!!.assets.open("fonts/DejaVuSans.ttf").use { com.tom_roush.pdfbox.pdmodel.font.PDType0Font.load(doc, it, true) }
+    } catch (e: Exception) {
+        null
+    }
+
+    fun visual(line: String): String = Shaper.visual(line)
+
+    private var curFont: com.tom_roush.pdfbox.pdmodel.font.PDType0Font? = null
+    private var fontTried = false
 
     // ---------- annotasiyaları vektor kimi PDF-ə yazmaq ----------
 
@@ -91,6 +104,10 @@ object PdfOps {
 
     private fun burn(doc: PDDocument, page: PDPage, anns: List<Ann>) {
         if (anns.isEmpty()) return
+        if (!fontTried && anns.any { it.type == A_TEXT || it.type == A_NOTE }) {
+            fontTried = true
+            curFont = loadFont(doc)
+        }
         val (m, W, H) = displayMatrix(page)
         val cs = PDPageContentStream(doc, page, PDPageContentStream.AppendMode.APPEND, true, true)
         try {
@@ -108,6 +125,44 @@ object PdfOps {
         }
     }
 
+    // Seçilə bilən real mətn (yerləşdirilmiş şrift). Glif yoxdursa false -> şəkil kimi yazılır
+    private fun realText(cs: PDPageContentStream, a: Ann, W: Float, H: Float): Boolean {
+        val font = curFont ?: return false
+        val lines = textLines(a.text).map { visual(it) }
+        try {
+            for (ln in lines) font.encode(ln)
+        } catch (e: Exception) {
+            return false
+        }
+        val sw = a.w * W
+        val x0 = a.p[0] * W
+        val y0 = a.p[1] * H
+        if (a.type == A_NOTE) {
+            val box = textBox(a, 0f, 0f, W, H, Paint())
+            cs.saveGraphicsState()
+            cs.setNonStrokingColor(rgb(0xFFFFF59D.toInt()))
+            cs.addRect(box.left, box.top, box.width(), box.height())
+            cs.fill()
+            cs.setNonStrokingColor(rgb(0xFFF9A825.toInt()))
+            cs.addRect(box.left, box.top, box.width(), max(1f, sw * 0.18f))
+            cs.fill()
+            cs.restoreGraphicsState()
+        }
+        cs.saveGraphicsState()
+        cs.setNonStrokingColor(rgb(a.ink))
+        cs.beginText()
+        cs.setFont(font, sw)
+        var y = y0 + sw
+        for (ln in lines) {
+            cs.setTextMatrix(Matrix(1f, 0f, 0f, -1f, x0, y))
+            cs.showText(ln)
+            y += sw * 1.2f
+        }
+        cs.endText()
+        cs.restoreGraphicsState()
+        return true
+    }
+
     private fun burnOne(doc: PDDocument, cs: PDPageContentStream, a: Ann, W: Float, H: Float) {
         val n = a.p.size / 2
         if (n == 0) return
@@ -115,6 +170,7 @@ object PdfOps {
         fun Y(i: Int) = a.p[2 * i + 1] * H
         when (a.type) {
             A_TEXT, A_NOTE -> {
+                if (realText(cs, a, W, H)) return
                 val (bm, box) = textBitmap(a, W, H) ?: return
                 val img = LosslessFactory.createFromImage(doc, bm)
                 cs.drawImage(img, Matrix(box.width(), 0f, 0f, -box.height(), box.left, box.bottom))
@@ -211,6 +267,8 @@ object PdfOps {
     // Orijinal PDF + qeydlər -> yeni PDF (mətn və vektorlar saxlanılır)
     fun export(src: File, anns: List<List<Ann>>, out: OutputStream, pages: Set<Int>? = null) {
         PDDocument.load(src).use { doc ->
+            curFont = null
+            fontTried = false
             val n = doc.numberOfPages
             for (i in 0 until min(n, anns.size)) burn(doc, doc.getPage(i), anns[i])
             if (pages != null) {

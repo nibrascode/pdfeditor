@@ -133,6 +133,10 @@ class MainActivity : Activity() {
         store = Store(this)
         PdfOps.init(this)
         ImgCache.dir = store.dir
+        try {
+            AppFont.tf = android.graphics.Typeface.createFromAsset(assets, "fonts/DejaVuSans.ttf")
+        } catch (e: Exception) {
+        }
         val root = FrameLayout(this)
         root.setBackgroundColor(Ui.BG)
         home = buildHome()

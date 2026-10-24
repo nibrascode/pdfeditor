@@ -78,6 +78,11 @@ object ImgCache {
     }
 }
 
+// Mətn qeydləri üçün vahid şrift (ekranda və PDF-də eyni) — DejaVu Sans: Azərbaycan + ərəb
+object AppFont {
+    var tf: android.graphics.Typeface? = null
+}
+
 fun textLines(s: String): List<String> = s.split("\n")
 
 fun a2f(a: Ann): FloatArray = FloatArray(a.p.size) { a.p[it] }
@@ -163,6 +168,7 @@ fun drawAnn(c: Canvas, a: Ann, l: Float, t: Float, w: Float, h: Float, pt: Paint
     pt.isAntiAlias = true
     val sw = a.w * w
     if (a.type == A_TEXT || a.type == A_NOTE) {
+        pt.typeface = AppFont.tf
         pt.textSize = sw
         val lines = textLines(a.text)
         val x0 = l + a.p[0] * w
@@ -321,6 +327,7 @@ fun jsonToAnns(s: String, pages: List<PageData>) {
 fun textBox(a: Ann, l: Float, t: Float, w: Float, h: Float, pt: Paint): RectF {
     val sw = a.w * w
     pt.reset()
+    pt.typeface = AppFont.tf
     pt.textSize = sw
     val lines = textLines(a.text)
     var bw = 0f
