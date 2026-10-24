@@ -6,7 +6,7 @@ Yoxlanılıb: 21.10.2026 (Play qaydaları bu tarixə görədir; Play Console-un 
 - **Target API 36 (Android 16):** Google 31.08.2026-dan yeni tətbiq və yeniləmələrdə bunu tələb edir.
 - **AAB** (Play-in tələb etdiyi format) + R8 kiçiltmə. `versionCode` hər GitHub run-da avtomatik artır.
 - **İmza:** upload açarı GitHub Secrets-dən oxunur, açar repo-ya düşmür.
-- **İcazə yoxdur** (INTERNET də yoxdur) → Data safety-də "məlumat toplanmır".
+- **Yalnız INTERNET icazəsi** — yalnız OCR dil faylının bir dəfəlik yüklənməsi üçün; istifadəçi məlumatı göndərilmir → Data safety-də "məlumat toplanmır / paylaşılmır".
 - Android 15/16 tələbləri (tam ekran / edge-to-edge, yeni "geri" jesti) tətbiqdə nəzərə alınıb.
 
 ## Addımlar
@@ -38,7 +38,7 @@ Paket adı `com.nibrascode.pdf` ilk yükləmədən sonra dəyişdirilə bilmir.
 ### 5) "App content" bölməsi (hamısı doldurulmalıdır)
 | Bölmə | Cavab |
 |---|---|
-| Privacy policy | `play/privacy-policy.html` faylını saytına yüklə (məs. nibrascode.com/pdf/privacy.html), `__EMAIL__` yerinə e-poçtunu yaz, linki bura qoy. Link ictimai olmalı, login və PDF olmamalıdır |
+| Privacy policy | `play/privacy-policy.html` faylını saytına yüklə (məs. nibrascode.com/pdf/privacy.html), e-poçt artıq yazılıb (nibrascode@gmail.com), linki bura qoy. Link ictimai olmalı, login və PDF olmamalıdır |
 | Ads | Yox |
 | App access | Bütün funksiyalar qeydiyyatsız açıqdır |
 | Data safety | "Does your app collect or share any of the required user data types?" → **No**. (Google bu formu məlumat toplamayan tətbiqlər üçün də tələb edir) |
@@ -78,7 +78,7 @@ NƏ EDƏ BİLƏRSƏN
 
 MƏXFİLİK
 • Hesab, qeydiyyat və reklam yoxdur
-• Tətbiq internetə qoşulmur — sənədlərin yalnız sənin cihazında qalır
+• Sənədlərin yalnız sənin cihazında qalır — internet yalnız OCR dil faylının bir dəfəlik yüklənməsi üçündür
 
 QEYD
 Saxlanan PDF nüsxəsində səhifələr şəkil formatında olur (mətn seçmək mümkün deyil). Parollu PDF-lər hələlik dəstəklənmir.
@@ -106,7 +106,7 @@ WHAT YOU CAN DO
 
 PRIVACY
 • No account, no sign-up, no ads
-• The app never connects to the internet — your documents stay on your device
+• Your documents stay on your device — internet is used only for a one-time OCR language download
 
 NOTE
 In the saved PDF copy, pages are stored as images (text cannot be selected). Password-protected PDFs are not supported yet.
