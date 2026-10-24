@@ -320,7 +320,7 @@ class MainActivity : Activity() {
         recentBox.orientation = LinearLayout.VERTICAL
         homeBox.addView(recentBox, LinearLayout.LayoutParams(MP, WC))
 
-        val note = label("Fayllar yalnız cihazında saxlanılır. İnternet tələb olunmur.", 12f, Ui.DIM)
+        val note = label("Fayllar yalnız cihazında saxlanılır. İnternet yalnız OCR dil fayllarını bir dəfə yükləmək üçündür.", 12f, Ui.DIM)
         note.gravity = Gravity.CENTER
         note.setPadding(0, dp(24), 0, 0)
         homeBox.addView(note, LinearLayout.LayoutParams(MP, WC))
