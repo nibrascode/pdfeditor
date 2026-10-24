@@ -125,6 +125,44 @@ object PdfOps {
         }
     }
 
+    // OCR sözlərini görünməz mətn qatı kimi yazır (PDF axtarıla və seçilə bilən olur)
+    private fun invisibleText(doc: PDDocument, page: PDPage, words: List<OcrWord>) {
+        if (words.isEmpty()) return
+        if (!fontTried) {
+            fontTried = true
+            curFont = loadFont(doc)
+        }
+        val font = curFont ?: return
+        val (m, W, H) = displayMatrix(page)
+        val cs = PDPageContentStream(doc, page, PDPageContentStream.AppendMode.APPEND, true, true)
+        try {
+            cs.saveGraphicsState()
+            cs.transform(m)
+            cs.beginText()
+            cs.setRenderingMode(com.tom_roush.pdfbox.pdmodel.graphics.state.RenderingMode.NEITHER)
+            for (w in words) {
+                val t = visual(w.text)
+                try {
+                    font.encode(t)
+                } catch (e: Exception) {
+                    continue
+                }
+                val h = (w.box.height() * H).coerceAtLeast(1f)
+                val bw = w.box.width() * W
+                val size = h * 0.85f
+                val tw = font.getStringWidth(t) / 1000f * size
+                cs.setFont(font, size)
+                cs.setHorizontalScaling(if (tw > 0f) (bw / tw * 100f).coerceIn(10f, 1000f) else 100f)
+                cs.setTextMatrix(Matrix(1f, 0f, 0f, -1f, w.box.left * W, w.box.bottom * H - h * 0.15f))
+                cs.showText(t)
+            }
+            cs.endText()
+            cs.restoreGraphicsState()
+        } finally {
+            cs.close()
+        }
+    }
+
     // Seçilə bilən real mətn (yerləşdirilmiş şrift). Glif yoxdursa false -> şəkil kimi yazılır
     private fun realText(cs: PDPageContentStream, a: Ann, W: Float, H: Float): Boolean {
         val font = curFont ?: return false
@@ -265,11 +303,18 @@ object PdfOps {
     }
 
     // Orijinal PDF + qeydlər -> yeni PDF (mətn və vektorlar saxlanılır)
-    fun export(src: File, anns: List<List<Ann>>, out: OutputStream, pages: Set<Int>? = null) {
+    fun export(src: File, anns: List<List<Ann>>, out: OutputStream, pages: Set<Int>? = null, ocr: List<List<OcrWord>?>? = null) {
         PDDocument.load(src).use { doc ->
             curFont = null
             fontTried = false
             val n = doc.numberOfPages
+            if (ocr != null) for (i in 0 until min(n, ocr.size)) {
+                val w = ocr[i] ?: continue
+                try {
+                    invisibleText(doc, doc.getPage(i), w)
+                } catch (e: Exception) {
+                }
+            }
             for (i in 0 until min(n, anns.size)) burn(doc, doc.getPage(i), anns[i])
             if (pages != null) {
                 for (i in n - 1 downTo 0) if (i !in pages) doc.removePage(i)

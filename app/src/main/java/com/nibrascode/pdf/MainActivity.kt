@@ -1303,7 +1303,7 @@ class MainActivity : Activity() {
         val id = curId ?: throw IOException("no doc")
         try {
             val buf = java.io.ByteArrayOutputStream()
-            PdfOps.export(store.pdf(id), snap, buf, only)
+            PdfOps.export(store.pdf(id), snap, buf, only, loadOcr(id))
             val pw = store.password(id)
             if (pw != null) PdfOps.encrypt(buf.toByteArray(), pw, os) else buf.writeTo(os)
         } catch (e: Throwable) {
@@ -1616,8 +1616,76 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // ======================= OCR =======================
+
+    private fun ocrFile(id: String) = File(store.dir, id + "_ocr.json")
+
+    private fun loadOcr(id: String): List<List<OcrWord>?>? = try {
+        val f = ocrFile(id)
+        if (f.exists()) Ocr.fromJson(f.readText()) else null
+    } catch (e: Exception) {
+        null
+    }
+
     private fun ocrAll() {
-        toast("OCR hazırlanır")
+        val id = curId ?: return
+        val dl = if (Ocr.ready(this)) "" else "\n\nİlk dəfə dil faylları yüklənəcək (~10 MB, internet lazımdır). Sonra tam oflayn işləyir."
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle("Mətni tanı (OCR)")
+            .setMessage("Skan edilmiş səhifələrdəki yazılar cihazda tanınacaq (Azərbaycan, ərəb, ingilis). Bundan sonra axtarış işləyəcək, saxlananda PDF-ə görünməz mətn qatı əlavə olunacaq.$dl")
+            .setPositiveButton("Başla") { _, _ -> runOcr(id) }
+            .setNegativeButton("Ləğv et", null)
+            .show()
+    }
+
+    private fun runOcr(id: String) {
+        val r = renderer ?: return
+        val ver = docVer
+        val (dlg, tv) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                if (!Ocr.ready(this)) Ocr.download(this) { l -> runOnUiThread { tv.text = "Dil faylı yüklənir: $l" } }
+                // mətn qatı olan səhifələri ötür
+                val texts = try { PdfOps.extract(store.pdf(id)) { _, _ -> } } catch (e: Throwable) { null }
+                val n = r.pageCount
+                val prev = loadOcr(id)
+                val res = ArrayList<List<OcrWord>?>()
+                val t = Ocr.open(this)
+                try {
+                    for (i in 0 until n) {
+                        if (ver != docVer) throw InterruptedException()
+                        val has = texts?.getOrNull(i)?.text?.isNotBlank() == true
+                        val old = prev?.getOrNull(i)
+                        if (has) { res.add(null); continue }
+                        if (old != null) { res.add(old); continue }
+                        runOnUiThread { tv.text = "Tanınır… ${i + 1}/$n" }
+                        val (bm, _) = renderPage(r, i, 2000)
+                        res.add(Ocr.recognize(t, bm))
+                        bm.recycle()
+                    }
+                } finally {
+                    t.recycle()
+                }
+                ocrFile(id).writeText(Ocr.toJson(res))
+                val cnt = res.count { it != null }
+                runOnUiThread {
+                    dlg.dismiss()
+                    texts_reset()
+                    toast(if (cnt == 0) "Bütün səhifələrdə artıq mətn var — OCR lazım deyil" else "$cnt səhifə tanındı ✓ İndi axtara bilərsən")
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast(if (e is java.io.IOException) "Dil faylları yüklənmədi — interneti yoxla" else "OCR alınmadı")
+                }
+            }
+        }
+    }
+
+    private fun texts_reset() {
+        texts = null
+        textsFor = null
+        hits = emptyList()
     }
 
     // ======================= şifrə =======================
@@ -2027,6 +2095,7 @@ class MainActivity : Activity() {
                     thumbs = arrayOfNulls(pages.size)
                     thumbBusy.clear()
                     store.thumb(id).delete()
+                    ocrFile(id).delete()
                     store.touch(id, docName, pages.size)
                     saveAnnotationsNow()
                     (gridView?.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged()
@@ -2337,7 +2406,9 @@ class MainActivity : Activity() {
         val my = docVer
         exec.execute {
             try {
-                val t = PdfOps.extract(store.pdf(id)) { i, n -> runOnUiThread { searchCount.text = "${i + 1}/$n" } }
+                val t0 = PdfOps.extract(store.pdf(id)) { i, n -> runOnUiThread { searchCount.text = "${i + 1}/$n" } }
+                val oc = loadOcr(id)
+                val t = t0.mapIndexed { i, p -> if (p.text.isBlank()) oc?.getOrNull(i)?.let { Ocr.pageText(it) } ?: p else p }
                 runOnUiThread {
                     if (my == docVer && id == curId) {
                         texts = t
@@ -2358,7 +2429,14 @@ class MainActivity : Activity() {
             searchCount.text = "0"
             pv.setHits(emptyMap(), -1, emptyList())
             val noText = texts?.all { it.text.isBlank() } == true
-            toast(if (noText) "Bu PDF-də mətn qatı yoxdur (skan edilmiş ola bilər)" else "Tapılmadı")
+            if (noText) {
+                AlertDialog.Builder(this, R.style.NbDialog)
+                    .setTitle("Mətn qatı yoxdur")
+                    .setMessage("Bu PDF skan edilmiş görünür. Axtarmaq üçün əvvəlcə mətni tanıyaq (OCR)?")
+                    .setPositiveButton("OCR et") { _, _ -> ocrAll() }
+                    .setNegativeButton("Bağla", null)
+                    .show()
+            } else toast("Tapılmadı")
             return
         }
         hitIdx = h.indexOfFirst { it.page >= page }.let { if (it < 0) 0 else it }

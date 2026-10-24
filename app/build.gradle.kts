@@ -18,7 +18,9 @@ android {
         targetSdk = 36
         // Play hər yükləmədə daha böyük versionCode tələb edir: GitHub run nömrəsi avtomatik artır
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "2.1.0"
+        versionName = "2.2.0"
+        // Telefonlar üçün kifayətdir; APK həcmini kiçildir (OCR native kitabxanaları)
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -65,4 +67,6 @@ kotlin {
 dependencies {
     // PDF yazmaq, səhifə əməliyyatları və mətn axtarışı (Apache 2.0)
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    // Cihazda OCR (Tesseract 5, Apache 2.0) — dil faylları ilk istifadədə yüklənir
+    implementation("cz.adaptech.tesseract4android:tesseract4android-openmp:4.9.0")
 }
