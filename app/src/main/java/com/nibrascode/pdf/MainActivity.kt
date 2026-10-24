@@ -291,7 +291,7 @@ class MainActivity : Activity() {
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(14), 0, 0, 0)
         col.addView(label("Nibras PDF", 26f, Ui.TEXT, true))
-        val tag = label("Oxu · Yaz · Rənglə", 13f, Ui.GOLD)
+        val tag = label("Oxu · Yaz · İmzala · Paylaş", 13f, Ui.GOLD)
         tag.letterSpacing = 0.06f
         col.addView(tag)
         head.addView(col, LinearLayout.LayoutParams(0, WC, 1f))
@@ -466,6 +466,10 @@ class MainActivity : Activity() {
         pillLabel.gravity = Gravity.CENTER
         pillLabel.minWidth = dp(54)
         pillLabel.setOnClickListener { jumpDialog() }
+        pillLabel.setOnLongClickListener {
+            openGrid()
+            true
+        }
         pill.addView(pillLabel, LinearLayout.LayoutParams(WC, MP))
         pill.addView(iconButton(R.drawable.ic_chev_r, "Növbəti səhifə", Ui.TEXT, 36, 8) { showPage(page + 1) })
         val plp = FrameLayout.LayoutParams(WC, dp(36), Gravity.TOP or Gravity.CENTER_HORIZONTAL)

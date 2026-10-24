@@ -18,7 +18,7 @@ android {
         targetSdk = 36
         // Play hər yükləmədə daha böyük versionCode tələb edir: GitHub run nömrəsi avtomatik artır
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "2.0.0"
+        versionName = "2.1.0"
     }
 
     signingConfigs {
