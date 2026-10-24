@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private lateinit var titleName: TextView
     private lateinit var titleSub: TextView
     private lateinit var btnNight: ImageView
+    private lateinit var btnDayNight: ImageView
     private lateinit var btnUndo: ImageView
     private lateinit var btnMore: ImageView
     private lateinit var btnRedo: ImageView
@@ -168,6 +169,7 @@ class MainActivity : Activity() {
             ins
         }
         pv.night = store.night
+        styleNight()
         styleTools()
         refreshHome()
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false) else systemBars(true)
@@ -626,6 +628,8 @@ class MainActivity : Activity() {
         row.addView(pageBox, pbl)
         btnPen = lineBtn(R.drawable.ln_pen, tr(R.string.qelem_qeyd_rejimi)) { toggleAnnot() }
         row.addView(btnPen)
+        btnDayNight = lineBtn(R.drawable.ln_moon, tr(R.string.gece_rejimi)) { toggleNight() }
+        row.addView(btnDayNight)
         btnNight = lineBtn(R.drawable.ln_search, tr(R.string.axtar)) { openSearch() }
         row.addView(btnNight)
         if (wide) row.addView(lineBtn(R.drawable.ln_share, tr(R.string.paylas)) { sharePdf() })
@@ -810,7 +814,7 @@ class MainActivity : Activity() {
         val ic = tintedIcon(res, Ui.GOLD, 22)
         tile.addView(ic, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
         v.addView(tile, LinearLayout.LayoutParams(dp(42), dp(42)))
-        val t = label(name, 11f, Ui.TEXT)
+        val t = label(name, 11f, if (pv.night) Ui.ON_BAR else Ui.TEXT)
         t.setPadding(0, dp(3), 0, 0)
         t.maxLines = 1
         v.addView(t)
@@ -1056,7 +1060,18 @@ class MainActivity : Activity() {
         styleNight()
     }
 
+    // Yalnız ekran: səhifə rəngləri DocView-da filtrlə dəyişir, annotasiyalar və saxlanan PDF dəyişmir
     private fun styleNight() {
+        if (!::btnDayNight.isInitialized) return
+        val n = pv.night
+        btnDayNight.setImageResource(if (n) R.drawable.ln_sun else R.drawable.ln_moon)
+        val d = if (n) tr(R.string.gunduz_rejimi) else tr(R.string.gece_rejimi)
+        btnDayNight.contentDescription = d
+        if (Build.VERSION.SDK_INT >= 26) btnDayNight.tooltipText = d
+        btnDayNight.imageTintList = ColorStateList.valueOf(if (n) Ui.ACCENT else Ui.ON_BAR)
+        chrome.setBackgroundColor(if (n) 0xFF0C1326.toInt() else Ui.BAR)
+        ribbon.background = rounded(if (n) 0xFF1E2433.toInt() else Color.WHITE, 0f)
+        if (curTab == 0) selectTab(0)
     }
 
     // Ümumi tarixçə: annotasiya (səhifə nömrəsi) və ya səhifə əməliyyatı (snapshot)
@@ -2016,7 +2031,7 @@ class MainActivity : Activity() {
         // Görünüş
         val g1 = group(tr(R.string.gorunus))
         row(g1, R.drawable.ln_globe, tr(R.string.dil), langName(store.lang)) { chooseLanguage() }
-        val nsw = switch(store.night) { v -> store.night = v; if (::pv.isInitialized) pv.night = v }
+        val nsw = switch(store.night) { v -> store.night = v; if (::pv.isInitialized) { pv.night = v; styleNight() } }
         row(g1, R.drawable.ln_moon, tr(R.string.gece_rejimi), tr(R.string.gece_rejimi_alt), nsw) { nsw.toggle() }
         val fsw = switch(store.fullscreen) { v -> store.fullscreen = v }
         row(g1, R.drawable.ln_expand, tr(R.string.tam_ekranda_ac), tr(R.string.tam_ekranda_ac_alt), fsw) { fsw.toggle() }
