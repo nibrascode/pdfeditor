@@ -101,6 +101,30 @@ class Store(ctx: Context) {
             prefs.edit().putString("sig", v).apply()
         }
 
+    var lang: String
+        get() = prefs.getString("lang", "") ?: ""
+        set(v) {
+            prefs.edit().putString("lang", v).commit()
+        }
+
+    // true: «Yadda saxla» orijinal fayla yazır; false: həmişə yeni fayl
+    var overwrite: Boolean
+        get() = prefs.getBoolean("overwrite", true)
+        set(v) {
+            prefs.edit().putBoolean("overwrite", v).apply()
+        }
+
+    // PDF açılanda tam ekran
+    var fullscreen: Boolean
+        get() = prefs.getBoolean("fullscreen", true)
+        set(v) {
+            prefs.edit().putBoolean("fullscreen", v).apply()
+        }
+
+    fun clearRecents() {
+        for (r in recents()) remove(r.id)
+    }
+
     var night: Boolean
         get() = prefs.getBoolean("night", false)
         set(v) {

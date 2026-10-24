@@ -59,6 +59,8 @@ private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
 private const val MAX_W = 3000
 
 class MainActivity : Activity() {
+    private fun tr(id: Int, vararg a: Any): String = if (a.isEmpty()) getString(id) else getString(id, *a)
+
     private lateinit var store: Store
     private lateinit var home: FrameLayout
     private lateinit var homeBox: LinearLayout
@@ -127,6 +129,21 @@ class MainActivity : Activity() {
     private val toolAmt = floatArrayOf(0f, 0.30f, 0.50f, 0.40f, 0.30f, 0f, 0.30f)
 
     // ======================= həyat dövrü =======================
+
+    // Tətbiq daxilində seçilmiş dil (boş = sistem dili)
+    override fun attachBaseContext(base: android.content.Context) {
+        val tag = base.getSharedPreferences("nibras_pdf", MODE_PRIVATE).getString("lang", "") ?: ""
+        if (tag.isEmpty()) {
+            super.attachBaseContext(base)
+            return
+        }
+        val loc = java.util.Locale.forLanguageTag(tag)
+        java.util.Locale.setDefault(loc)
+        val cfg = android.content.res.Configuration(base.resources.configuration)
+        cfg.setLocale(loc)
+        cfg.setLayoutDirection(loc)
+        super.attachBaseContext(base.createConfigurationContext(cfg))
+    }
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
@@ -204,12 +221,14 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (inEditor) onBack() else super.onBackPressed()
+        if (inEditor || settings?.visibility == View.VISIBLE) onBack() else super.onBackPressed()
     }
 
     // Geri: əvvəlcə açıq panelləri bağlayır
     private fun onBack() {
-        if (grid?.visibility == View.VISIBLE) {
+        if (settings?.visibility == View.VISIBLE) {
+            closeSettings()
+        } else if (grid?.visibility == View.VISIBLE) {
             closeGrid()
         } else if (annot) {
             exitAnnot()
@@ -290,10 +309,11 @@ class MainActivity : Activity() {
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(14), 0, 0, 0)
         col.addView(label("Nibras PDF", 26f, Ui.TEXT, true))
-        val tag = label("Oxu · Yaz · İmzala · Paylaş", 13f, Ui.GOLD)
+        val tag = label(tr(R.string.oxu_yaz_imzala_paylas), 13f, Ui.GOLD)
         tag.letterSpacing = 0.06f
         col.addView(tag)
         head.addView(col, LinearLayout.LayoutParams(0, WC, 1f))
+        head.addView(lineBtn(R.drawable.ln_settings, tr(R.string.ayarlar), 44) { openSettings() })
         homeBox.addView(head, LinearLayout.LayoutParams(MP, WC))
         homeBox.addView(space(26))
 
@@ -303,14 +323,14 @@ class MainActivity : Activity() {
         hero.background = ripple(goldGrad(dpf(20f)), false, dpf(20f))
         hero.elevation = dpf(8f)
         hero.addView(tintedIcon(R.drawable.ic_open, Color.WHITE, 24))
-        val ht = label("PDF aç", 17f, Color.WHITE, true)
+        val ht = label(tr(R.string.pdf_ac), 17f, Color.WHITE, true)
         ht.setPadding(dp(10), 0, 0, 0)
         hero.addView(ht)
         hero.setOnClickListener { pickPdf() }
         homeBox.addView(hero, LinearLayout.LayoutParams(MP, dp(60)))
         homeBox.addView(space(28))
 
-        val sec = label("SON AÇILANLAR", 12f, Ui.DIM, true)
+        val sec = label(tr(R.string.son_acilanlar), 12f, Ui.DIM, true)
         sec.letterSpacing = 0.14f
         homeBox.addView(sec)
         homeBox.addView(space(12))
@@ -318,7 +338,7 @@ class MainActivity : Activity() {
         recentBox.orientation = LinearLayout.VERTICAL
         homeBox.addView(recentBox, LinearLayout.LayoutParams(MP, WC))
 
-        val note = label("Fayllar yalnız cihazında saxlanılır. İnternet yalnız OCR dil fayllarını bir dəfə yükləmək üçündür.", 12f, Ui.DIM)
+        val note = label(tr(R.string.fayllar_yalniz_cihazinda_saxlanilir_inte), 12f, Ui.DIM)
         note.gravity = Gravity.CENTER
         note.setPadding(0, dp(24), 0, 0)
         homeBox.addView(note, LinearLayout.LayoutParams(MP, WC))
@@ -332,7 +352,7 @@ class MainActivity : Activity() {
         recentBox.removeAllViews()
         val list = store.recents()
         if (list.isEmpty()) {
-            val t = label("Hələ heç bir sənəd açılmayıb.\nBaşlamaq üçün «PDF aç» düyməsinə toxun.", 14f, Ui.DIM)
+            val t = label(tr(R.string.hele_hec_bir_sened_acilmayib_nbaslamaq_u), 14f, Ui.DIM)
             t.gravity = Gravity.CENTER
             t.setPadding(0, dp(36), 0, dp(36))
             recentBox.addView(t, LinearLayout.LayoutParams(MP, WC))
@@ -374,12 +394,12 @@ class MainActivity : Activity() {
         val nm = label(r.name, 15f, Ui.TEXT, true)
         nm.maxLines = 2
         nm.ellipsize = TextUtils.TruncateAt.END
-        val meta = label("${r.pages} səhifə · ${ago(r.time)}", 12f, Ui.DIM)
+        val meta = label(tr(R.string.p1_s_sehife_p2_s, r.pages, ago(r.time)), 12f, Ui.DIM)
         meta.setPadding(0, dp(4), 0, 0)
         col.addView(nm)
         col.addView(meta)
         card.addView(col, LinearLayout.LayoutParams(0, WC, 1f))
-        card.addView(iconButton(R.drawable.ic_delete, "Sil", Ui.DIM, 40, 9) { confirmRemove(r) })
+        card.addView(iconButton(R.drawable.ic_delete, tr(R.string.sil), Ui.DIM, 40, 9) { confirmRemove(r) })
         card.setOnClickListener { openRecent(r) }
         return card
     }
@@ -387,22 +407,22 @@ class MainActivity : Activity() {
     private fun ago(t: Long): String {
         val m = (System.currentTimeMillis() - t) / 60000
         return when {
-            m < 1 -> "indicə"
-            m < 60 -> "$m dəq əvvəl"
-            m < 1440 -> "${m / 60} saat əvvəl"
-            else -> "${m / 1440} gün əvvəl"
+            m < 1 -> tr(R.string.indice)
+            m < 60 -> tr(R.string.p1_s_deq_evvel, m)
+            m < 1440 -> tr(R.string.p1_s_saat_evvel, m / 60)
+            else -> tr(R.string.p1_s_gun_evvel, m / 1440)
         }
     }
 
     private fun confirmRemove(r: Recent) {
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Siyahıdan silinsin?")
-            .setMessage("«${r.name}» və onun qeydləri bu cihazdan silinəcək. Orijinal fayla toxunulmur.")
-            .setPositiveButton("Sil") { _, _ ->
+            .setTitle(tr(R.string.siyahidan_silinsin))
+            .setMessage(tr(R.string.p1_s_ve_onun_qeydleri_bu_cihazdan_siline, r.name))
+            .setPositiveButton(tr(R.string.sil)) { _, _ ->
                 store.remove(r.id)
                 refreshHome()
             }
-            .setNegativeButton("Ləğv et", null)
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 
@@ -426,7 +446,7 @@ class MainActivity : Activity() {
     private var chromeOn = true
     private var annot = false
     private var wide = false
-    private val tabNames = arrayOf("Ana Səhifə", "Əlavə et", "Redaktə", "Şərhlər", "Çevir", "Alətlər")
+    private val tabNames by lazy { arrayOf(tr(R.string.ana_sehife), tr(R.string.elave_et), tr(R.string.redakte), tr(R.string.serhler), tr(R.string.cevir), tr(R.string.aletler)) }
 
     private fun lineBtn(res: Int, desc: String, box: Int = 40, onClick: () -> Unit): ImageView {
         val b = iconButton(res, desc, Ui.ICON, box, 9, onClick)
@@ -440,7 +460,7 @@ class MainActivity : Activity() {
         wide = resources.configuration.smallestScreenWidthDp >= 600 || resources.configuration.screenWidthDp >= 720
 
         pv = DocView(this)
-        pv.hint = "Yüklənir…"
+        pv.hint = tr(R.string.yuklenir)
         pv.onNeed = { i, w -> renderFor(i, w) }
         pv.onPage = { p -> onPageChanged(p) }
         pv.onTap = { setChrome(!chromeOn) }
@@ -470,11 +490,11 @@ class MainActivity : Activity() {
         row.setPadding(dp(4), 0, dp(4), 0)
         val left = LinearLayout(this)
         left.gravity = Gravity.CENTER_VERTICAL
-        left.addView(lineBtn(R.drawable.ln_sidebar, "Səhifələr") { openGrid() })
-        if (wide) left.addView(lineBtn(R.drawable.ln_menu, "Menyu") { showMenu() })
-        left.addView(lineBtn(R.drawable.ln_cloud, "Yadda saxla") { save() })
-        btnUndo = lineBtn(R.drawable.ln_undo, "Geri al") { doUndo() }
-        btnRedo = lineBtn(R.drawable.ln_redo, "Təkrar et") { doRedo() }
+        left.addView(lineBtn(R.drawable.ln_sidebar, tr(R.string.sehifeler)) { openGrid() })
+        if (wide) left.addView(lineBtn(R.drawable.ln_menu, tr(R.string.menyu)) { showMenu() })
+        left.addView(lineBtn(R.drawable.ln_cloud, tr(R.string.yadda_saxla)) { save() })
+        btnUndo = lineBtn(R.drawable.ln_undo, tr(R.string.geri_al)) { doUndo() }
+        btnRedo = lineBtn(R.drawable.ln_redo, tr(R.string.tekrar_et)) { doRedo() }
         left.addView(btnUndo)
         left.addView(btnRedo)
         row.addView(left)
@@ -505,12 +525,12 @@ class MainActivity : Activity() {
         pageBox.minWidth = dp(22)
         pageBox.setPadding(dp(4), 0, dp(4), 0)
         row.addView(pageBox, pbl)
-        btnPen = lineBtn(R.drawable.ln_pen, "Qələm — qeyd rejimi") { toggleAnnot() }
+        btnPen = lineBtn(R.drawable.ln_pen, tr(R.string.qelem_qeyd_rejimi)) { toggleAnnot() }
         row.addView(btnPen)
-        btnNight = lineBtn(R.drawable.ln_search, "Axtar") { openSearch() }
+        btnNight = lineBtn(R.drawable.ln_search, tr(R.string.axtar)) { openSearch() }
         row.addView(btnNight)
-        if (wide) row.addView(lineBtn(R.drawable.ln_share, "Paylaş") { sharePdf() })
-        btnMore = lineBtn(if (wide) R.drawable.ln_close else R.drawable.ln_menu, if (wide) "Bağla" else "Menyu") { if (wide) goHome() else showMenu() }
+        if (wide) row.addView(lineBtn(R.drawable.ln_share, tr(R.string.paylas)) { sharePdf() })
+        btnMore = lineBtn(if (wide) R.drawable.ln_close else R.drawable.ln_menu, if (wide) tr(R.string.bagla) else tr(R.string.menyu)) { if (wide) goHome() else showMenu() }
         row.addView(btnMore)
         chrome.addView(row, LinearLayout.LayoutParams(MP, dp(48)))
         if (!wide) {
@@ -574,15 +594,15 @@ class MainActivity : Activity() {
             pillBtns[t] = b
             pill.addView(b)
         }
-        pb(TL_PEN, R.drawable.ln_pen, "Qələm")
-        pb(TL_HL, R.drawable.ln_marker, "Marker")
-        pb(TL_ERASE, R.drawable.ln_eraser, "Pozan")
-        pb(TL_SELECT, R.drawable.ln_lasso, "Seç və köçür")
-        colorBtn = lineBtn(R.drawable.ln_palette, "Rəng və qalınlıq", 48) { togglePanel() }
+        pb(TL_PEN, R.drawable.ln_pen, tr(R.string.qelem))
+        pb(TL_HL, R.drawable.ln_marker, tr(R.string.marker))
+        pb(TL_ERASE, R.drawable.ln_eraser, tr(R.string.pozan))
+        pb(TL_SELECT, R.drawable.ln_lasso, tr(R.string.sec_ve_kocur))
+        colorBtn = lineBtn(R.drawable.ln_palette, tr(R.string.reng_ve_qalinliq), 48) { togglePanel() }
         pill.addView(colorBtn)
-        pb(TL_SHAPE, R.drawable.ln_shape, "Fiqur")
-        pb(TL_VIEW, R.drawable.ln_hand, "Əl — sürüşdür")
-        pill.addView(lineBtn(R.drawable.ln_expand, "Tam ekran", 48) { setChrome(!chromeOn) })
+        pb(TL_SHAPE, R.drawable.ln_shape, tr(R.string.fiqur))
+        pb(TL_VIEW, R.drawable.ln_hand, tr(R.string.el_surusdur))
+        pill.addView(lineBtn(R.drawable.ln_expand, tr(R.string.tam_ekran), 48) { setChrome(!chromeOn) })
         val phs = android.widget.HorizontalScrollView(this)
         phs.isHorizontalScrollBarEnabled = false
         phs.clipToPadding = false
@@ -607,7 +627,7 @@ class MainActivity : Activity() {
         shapeRow = LinearLayout(this)
         shapeRow.gravity = Gravity.CENTER
         val shapeIcons = intArrayOf(R.drawable.ic_s_line, R.drawable.ic_s_arrow, R.drawable.ic_s_rect, R.drawable.ic_s_oval)
-        val shapeDescs = arrayOf("Xətt", "Ox", "Düzbucaqlı", "Elips")
+        val shapeDescs = arrayOf(tr(R.string.xett), tr(R.string.ox), tr(R.string.duzbucaqli), tr(R.string.elips))
         shapeIcons.forEachIndexed { i, res ->
             val b = iconButton(res, shapeDescs[i], Ui.ICON, 44, 10) {
                 shape = i
@@ -698,52 +718,52 @@ class MainActivity : Activity() {
         }
         val items: List<Triple<Int, String, () -> Unit>> = when (i) {
             0 -> listOf(
-                Triple(R.drawable.ln_pages, "Səhifələr") { openGrid() },
-                Triple(R.drawable.ln_moon, if (pv.night) "Gündüz" else "Gecə") { toggleNight(); selectTab(0) },
-                Triple(R.drawable.ln_goto, "Səhifəyə keç") { jumpDialog() },
-                Triple(R.drawable.ln_expand, "Tam ekran") { selectTab(-1); setChrome(false) },
-                Triple(R.drawable.ln_save, "Yadda saxla") { save() },
-                Triple(R.drawable.ln_saveas, "Fərqli saxla") { saveAs() }
+                Triple(R.drawable.ln_pages, tr(R.string.sehifeler)) { openGrid() },
+                Triple(R.drawable.ln_moon, if (pv.night) tr(R.string.gunduz) else tr(R.string.gece)) { toggleNight(); selectTab(0) },
+                Triple(R.drawable.ln_goto, tr(R.string.sehifeye_kec)) { jumpDialog() },
+                Triple(R.drawable.ln_expand, tr(R.string.tam_ekran)) { selectTab(-1); setChrome(false) },
+                Triple(R.drawable.ln_save, tr(R.string.yadda_saxla)) { save() },
+                Triple(R.drawable.ln_saveas, tr(R.string.ferqli_saxla)) { saveAs() }
             )
             1 -> listOf(
-                Triple(R.drawable.ln_text, "Mətn") { enterAnnot(TL_TEXT) },
-                Triple(R.drawable.ln_image, "Şəkil") { pickImage() },
-                Triple(R.drawable.ln_sign, "İmza") { signDialog() },
-                Triple(R.drawable.ln_note, "Qeyd") { enterAnnot(TL_NOTE) },
-                Triple(R.drawable.ln_shape, "Fiqur") { enterAnnot(TL_SHAPE) },
-                Triple(R.drawable.ln_add, "Boş səhifə") { insertBlank(page) }
+                Triple(R.drawable.ln_text, tr(R.string.metn)) { enterAnnot(TL_TEXT) },
+                Triple(R.drawable.ln_image, tr(R.string.sekil)) { pickImage() },
+                Triple(R.drawable.ln_sign, tr(R.string.imza)) { signDialog() },
+                Triple(R.drawable.ln_note, tr(R.string.qeyd)) { enterAnnot(TL_NOTE) },
+                Triple(R.drawable.ln_shape, tr(R.string.fiqur)) { enterAnnot(TL_SHAPE) },
+                Triple(R.drawable.ln_add, tr(R.string.bos_sehife)) { insertBlank(page) }
             )
             2 -> listOf(
-                Triple(R.drawable.ln_pages, "Səhifələr") { openGrid() },
-                Triple(R.drawable.ln_rotate, "Sağa döndər") { rotatePage(page, 90) },
-                Triple(R.drawable.ln_rotl, "Sola döndər") { rotatePage(page, -90) },
-                Triple(R.drawable.ln_copy, "Dublikat") { duplicatePage(page) },
-                Triple(R.drawable.ln_trash, "Səhifəni sil") { if (pages.size > 1) confirmDeletePage(page) },
-                Triple(R.drawable.ln_extract, "Çıxar") { extractDialog() }
+                Triple(R.drawable.ln_pages, tr(R.string.sehifeler)) { openGrid() },
+                Triple(R.drawable.ln_rotate, tr(R.string.saga_donder)) { rotatePage(page, 90) },
+                Triple(R.drawable.ln_rotl, tr(R.string.sola_donder)) { rotatePage(page, -90) },
+                Triple(R.drawable.ln_copy, tr(R.string.dublikat)) { duplicatePage(page) },
+                Triple(R.drawable.ln_trash, tr(R.string.sehifeni_sil)) { if (pages.size > 1) confirmDeletePage(page) },
+                Triple(R.drawable.ln_extract, tr(R.string.cixar)) { extractDialog() }
             )
             3 -> listOf(
-                Triple(R.drawable.ln_text, "Mətn") { enterAnnot(TL_TEXT) },
-                Triple(R.drawable.ln_marker, "Marker") { enterAnnot(TL_HL) },
-                Triple(R.drawable.ln_image, "Şəkil") { pickImage() },
-                Triple(R.drawable.ln_add, "Boş səhifə") { insertBlank(page) },
-                Triple(R.drawable.ln_sign, "İmza") { signDialog() },
-                Triple(R.drawable.ln_note, "Qeyd") { enterAnnot(TL_NOTE) },
-                Triple(R.drawable.ln_lasso, "Seç") { enterAnnot(TL_SELECT) },
-                Triple(R.drawable.ln_trash, "Seçiləni sil") { if (!pv.deleteSelected()) toast("Əvvəlcə «Seç» ilə qeydə toxun") }
+                Triple(R.drawable.ln_text, tr(R.string.metn)) { enterAnnot(TL_TEXT) },
+                Triple(R.drawable.ln_marker, tr(R.string.marker)) { enterAnnot(TL_HL) },
+                Triple(R.drawable.ln_image, tr(R.string.sekil)) { pickImage() },
+                Triple(R.drawable.ln_add, tr(R.string.bos_sehife)) { insertBlank(page) },
+                Triple(R.drawable.ln_sign, tr(R.string.imza)) { signDialog() },
+                Triple(R.drawable.ln_note, tr(R.string.qeyd)) { enterAnnot(TL_NOTE) },
+                Triple(R.drawable.ln_lasso, tr(R.string.sec)) { enterAnnot(TL_SELECT) },
+                Triple(R.drawable.ln_trash, tr(R.string.secileni_sil)) { if (!pv.deleteSelected()) toast(tr(R.string.evvelce_sec_ile_qeyde_toxun)) }
             )
             4 -> listOf(
-                Triple(R.drawable.ln_png, "Səhifə → PNG") { exportPng(page) },
-                Triple(R.drawable.ln_image, "Hamısı → JPEG") { shareImages() },
-                Triple(R.drawable.ln_merge, "Birləşdir") { pickMerge() },
-                Triple(R.drawable.ln_split, "Böl") { splitDialog() },
-                Triple(R.drawable.ln_extract, "Səhifə çıxar") { extractDialog() }
+                Triple(R.drawable.ln_png, tr(R.string.sehife_png)) { exportPng(page) },
+                Triple(R.drawable.ln_image, tr(R.string.hamisi_jpeg)) { shareImages() },
+                Triple(R.drawable.ln_merge, tr(R.string.birlesdir)) { pickMerge() },
+                Triple(R.drawable.ln_split, tr(R.string.bol)) { splitDialog() },
+                Triple(R.drawable.ln_extract, tr(R.string.sehife_cixar)) { extractDialog() }
             )
             else -> listOf(
-                Triple(R.drawable.ln_search, "Axtar") { openSearch() },
-                Triple(R.drawable.ln_ocr, "OCR (skan)") { ocrAll() },
-                Triple(R.drawable.ln_lock, "Şifrə") { passwordMenu() },
-                Triple(R.drawable.ln_print, "Çap et") { printPdf() },
-                Triple(R.drawable.ln_share, "Paylaş") { sharePdf() }
+                Triple(R.drawable.ln_search, tr(R.string.axtar)) { openSearch() },
+                Triple(R.drawable.ln_ocr, tr(R.string.ocr_skan)) { ocrAll() },
+                Triple(R.drawable.ln_lock, tr(R.string.sifre)) { passwordMenu() },
+                Triple(R.drawable.ln_print, tr(R.string.cap_et)) { printPdf() },
+                Triple(R.drawable.ln_share, tr(R.string.paylas)) { sharePdf() }
             )
         }
         for ((res, n, f) in items) ribbonRow.addView(ribbonItem(res, n, f))
@@ -984,7 +1004,7 @@ class MainActivity : Activity() {
     // Üzərinə yaz (orijinal fayla yazma icazəsi varsa), yoxsa «Fərqli saxla»
     private fun save() {
         val id = curId ?: return
-        val u = store.uri(id)
+        val u = if (store.overwrite) store.uri(id) else null
         if (u == null) {
             saveAs()
             return
@@ -1041,7 +1061,7 @@ class MainActivity : Activity() {
     }
 
     private fun openUri(uri: Uri, writeUri: Uri? = null) {
-        val (dlg, _) = progressDialog("Açılır…")
+        val (dlg, _) = progressDialog(tr(R.string.acilir))
         val name = queryName(uri) ?: "document.pdf"
         exec.execute {
             try {
@@ -1061,7 +1081,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("PDF açıla bilmədi")
+                    toast(tr(R.string.pdf_acila_bilmedi))
                 }
             }
         }
@@ -1071,10 +1091,10 @@ class MainActivity : Activity() {
         if (!store.pdf(r.id).exists()) {
             store.remove(r.id)
             refreshHome()
-            toast("Fayl tapılmadı")
+            toast(tr(R.string.fayl_tapilmadi))
             return
         }
-        val (dlg, _) = progressDialog("Açılır…")
+        val (dlg, _) = progressDialog(tr(R.string.acilir))
         exec.execute { loadStored(r.id, r.name, dlg) }
     }
 
@@ -1113,7 +1133,7 @@ class MainActivity : Activity() {
             if (fresh) store.pdf(id).delete()
             runOnUiThread {
                 dlg.dismiss()
-                toast("PDF açıla bilmədi")
+                toast(tr(R.string.pdf_acila_bilmedi))
             }
         }
     }
@@ -1138,7 +1158,7 @@ class MainActivity : Activity() {
         }
         store.touch(id, name, list.size)
         titleName.text = name
-        titleSub.text = "${list.size} səhifə"
+        titleSub.text = tr(R.string.p1_s_sehife, list.size)
         clearHistory()
         if (annot) exitAnnot()
         setTool(TL_VIEW)
@@ -1148,7 +1168,7 @@ class MainActivity : Activity() {
         pageBox.text = (start + 1).toString()
         pv.setDoc(ratios, pages, start)
         refreshHistoryButtons()
-        setChrome(false)
+        setChrome(!store.fullscreen)
     }
 
     // Hər səhifənin hündürlük/en nisbəti (exec thread)
@@ -1318,7 +1338,7 @@ class MainActivity : Activity() {
         var k = 0
         for (i in 0 until min(snap.size, r.pageCount)) {
             if (only != null && i !in only) continue
-            if (tv != null) runOnUiThread { tv.text = "Saxlanılır… " + (i + 1) + "/" + snap.size }
+            if (tv != null) runOnUiThread { tv.text = tr(R.string.saxlanilir) + (i + 1) + "/" + snap.size }
             val pg = r.openPage(i)
             val wPt = pg.width
             val hPt = pg.height
@@ -1344,7 +1364,7 @@ class MainActivity : Activity() {
     private fun savePdf(out: Uri, isNew: Boolean) {
         if (renderer == null) return
         val snap = snapshot()
-        val (dlg, tv) = progressDialog("Saxlanılır…")
+        val (dlg, tv) = progressDialog(tr(R.string.saxlanilir_2))
         exec.execute {
             try {
                 val os = contentResolver.openOutputStream(out, "wt") ?: throw IOException("null stream")
@@ -1357,11 +1377,11 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     dlg.dismiss()
                     if (!isNew) {
-                        toast("Orijinal fayla yazmaq olmadı — yeni fayl seç")
+                        toast(tr(R.string.orijinal_fayla_yazmaq_olmadi_yeni_fayl_s))
                         curId?.let { store.setUri(it, null) }
                         saveAs()
                     } else {
-                        toast("Saxlama xətası")
+                        toast(tr(R.string.saxlama_xetasi))
                     }
                 }
             }
@@ -1380,7 +1400,7 @@ class MainActivity : Activity() {
     private fun sharePdf() {
         if (renderer == null) return
         val snap = snapshot()
-        val (dlg, _) = progressDialog("Hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
                 val f = exportTemp(snap)
@@ -1391,7 +1411,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Paylaşmaq mümkün olmadı")
+                    toast(tr(R.string.paylasmaq_mumkun_olmadi))
                 }
             }
         }
@@ -1400,7 +1420,7 @@ class MainActivity : Activity() {
     private fun printPdf() {
         if (renderer == null) return
         val snap = snapshot()
-        val (dlg, _) = progressDialog("Çapa hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.capa_hazirlanir))
         exec.execute {
             try {
                 val f = exportTemp(snap, null, "_cap")
@@ -1412,7 +1432,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Çap mümkün olmadı")
+                    toast(tr(R.string.cap_mumkun_olmadi))
                 }
             }
         }
@@ -1420,10 +1440,10 @@ class MainActivity : Activity() {
 
     private fun showSaved(uri: Uri, isNew: Boolean) {
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Saxlandı ✓")
-            .setMessage(if (isNew) "PDF yeni faylda saxlanıldı. İstəsən indi paylaşa bilərsən." else "Dəyişikliklər orijinal fayla yazıldı.")
-            .setPositiveButton("Paylaş") { _, _ -> shareUri(uri) }
-            .setNegativeButton("Bağla", null)
+            .setTitle(tr(R.string.saxlandi))
+            .setMessage(if (isNew) tr(R.string.pdf_yeni_faylda_saxlanildi_istesen_indi_) else tr(R.string.deyisiklikler_orijinal_fayla_yazildi))
+            .setPositiveButton(tr(R.string.paylas)) { _, _ -> shareUri(uri) }
+            .setNegativeButton(tr(R.string.bagla), null)
             .show()
     }
 
@@ -1434,9 +1454,9 @@ class MainActivity : Activity() {
             i.putExtra(Intent.EXTRA_STREAM, uri)
             i.clipData = android.content.ClipData.newRawUri("", uri)
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            startActivity(Intent.createChooser(i, "Paylaş"))
+            startActivity(Intent.createChooser(i, tr(R.string.paylas)))
         } catch (e: Exception) {
-            toast("Paylaşmaq mümkün olmadı")
+            toast(tr(R.string.paylasmaq_mumkun_olmadi))
         }
     }
 
@@ -1466,7 +1486,7 @@ class MainActivity : Activity() {
         val et = EditText(this)
         et.setText(a?.text ?: "")
         et.setSelection(et.text.length)
-        et.hint = "Mətn yaz…"
+        et.hint = tr(R.string.metn_yaz)
         et.setTextColor(Ui.TEXT)
         et.setHintTextColor(Ui.DIM)
         et.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -1476,11 +1496,11 @@ class MainActivity : Activity() {
         box.setPadding(dp(22), dp(8), dp(22), 0)
         box.addView(et, FrameLayout.LayoutParams(MP, WC))
         val b = AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle(if (note) (if (a == null) "Yapışqan qeyd" else "Qeydi dəyiş") else if (a == null) "Mətn əlavə et" else "Mətni dəyiş")
+            .setTitle(if (note) (if (a == null) tr(R.string.yapisqan_qeyd) else tr(R.string.qeydi_deyis)) else if (a == null) tr(R.string.metn_elave_et) else tr(R.string.metni_deyis))
             .setView(box)
             .setPositiveButton("OK") { _, _ -> commitText(pg, a, et.text.toString().trim(), nx, ny, note) }
-            .setNegativeButton("Ləğv et", null)
-        if (a != null) b.setNeutralButton("Sil") { _, _ -> pv.removeAnn(pg, a) }
+            .setNegativeButton(tr(R.string.legv_et), null)
+        if (a != null) b.setNeutralButton(tr(R.string.sil)) { _, _ -> pv.removeAnn(pg, a) }
         val d = b.create()
         d.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         d.show()
@@ -1515,11 +1535,11 @@ class MainActivity : Activity() {
         }
         pv.addImage(page, name, bm.height.toFloat() / bm.width, wFrac)
         enterAnnot(TL_SELECT)
-        toast("Yerini dəyişmək üçün sürüşdür, küncdən böyüt")
+        toast(tr(R.string.yerini_deyismek_ucun_surusdur_kuncden_bo))
     }
 
     private fun insertImage(u: Uri) {
-        val (dlg, _) = progressDialog("Şəkil hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.sekil_hazirlanir))
         exec.execute {
             try {
                 val o = BitmapFactory.Options()
@@ -1544,7 +1564,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Şəkil açıla bilmədi")
+                    toast(tr(R.string.sekil_acila_bilmedi))
                 }
             }
         }
@@ -1555,8 +1575,8 @@ class MainActivity : Activity() {
         val saved = store.signature?.let { File(store.dir, it) }?.takeIf { it.exists() }
         if (saved != null) {
             AlertDialog.Builder(this, R.style.NbDialog)
-                .setTitle("İmza")
-                .setItems(arrayOf("Saxlanmış imzanı qoy", "Yeni imza çək")) { _, w ->
+                .setTitle(tr(R.string.imza))
+                .setItems(arrayOf(tr(R.string.saxlanmis_imzani_qoy), tr(R.string.yeni_imza_cek))) { _, w ->
                     if (w == 0) {
                         val bm = BitmapFactory.decodeFile(saved.path)
                         if (bm != null) placeBitmap(bm, true, 0.3f)
@@ -1589,15 +1609,15 @@ class MainActivity : Activity() {
             lp.setMargins(dp(6), 0, dp(6), 0)
             row.addView(v, lp)
         }
-        val clr = label("Təmizlə", 14f, Ui.GOLD, true)
+        val clr = label(tr(R.string.temizle), 14f, Ui.GOLD, true)
         clr.setPadding(dp(16), dp(6), dp(6), dp(6))
         clr.setOnClickListener { pad.clear() }
         row.addView(clr)
         col.addView(row)
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("İmzanı çək")
+            .setTitle(tr(R.string.imzani_cek))
             .setView(col)
-            .setPositiveButton("Qoy") { _, _ ->
+            .setPositiveButton(tr(R.string.qoy)) { _, _ ->
                 val bm = pad.export()
                 if (bm != null) {
                     try {
@@ -1610,7 +1630,7 @@ class MainActivity : Activity() {
                     placeBitmap(bm, true, 0.3f)
                 }
             }
-            .setNegativeButton("Ləğv et", null)
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 
@@ -1627,22 +1647,22 @@ class MainActivity : Activity() {
 
     private fun ocrAll() {
         val id = curId ?: return
-        val dl = if (Ocr.ready(this)) "" else "\n\nİlk dəfə dil faylları yüklənəcək (~10 MB, internet lazımdır). Sonra tam oflayn işləyir."
+        val dl = if (Ocr.ready(this)) "" else tr(R.string.n_nilk_defe_dil_fayllari_yuklenecek_10_m)
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Mətni tanı (OCR)")
-            .setMessage("Skan edilmiş səhifələrdəki yazılar cihazda tanınacaq (Azərbaycan, ərəb, ingilis). Bundan sonra axtarış işləyəcək, saxlananda PDF-ə görünməz mətn qatı əlavə olunacaq.$dl")
-            .setPositiveButton("Başla") { _, _ -> runOcr(id) }
-            .setNegativeButton("Ləğv et", null)
+            .setTitle(tr(R.string.metni_tani_ocr))
+            .setMessage(tr(R.string.skan_edilmis_sehifelerdeki_yazilar_cihaz, dl))
+            .setPositiveButton(tr(R.string.basla)) { _, _ -> runOcr(id) }
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 
     private fun runOcr(id: String) {
         val r = renderer ?: return
         val ver = docVer
-        val (dlg, tv) = progressDialog("Hazırlanır…")
+        val (dlg, tv) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
-                if (!Ocr.ready(this)) Ocr.download(this) { l -> runOnUiThread { tv.text = "Dil faylı yüklənir: $l" } }
+                if (!Ocr.ready(this)) Ocr.download(this) { l -> runOnUiThread { tv.text = tr(R.string.dil_fayli_yuklenir_p1_s, l) } }
                 // mətn qatı olan səhifələri ötür
                 val texts = try { PdfOps.extract(store.pdf(id)) { _, _ -> } } catch (e: Throwable) { null }
                 val n = r.pageCount
@@ -1656,7 +1676,7 @@ class MainActivity : Activity() {
                         val old = prev?.getOrNull(i)
                         if (has) { res.add(null); continue }
                         if (old != null) { res.add(old); continue }
-                        runOnUiThread { tv.text = "Tanınır… ${i + 1}/$n" }
+                        runOnUiThread { tv.text = tr(R.string.taninir_p1_s_p2_s, i + 1, n) }
                         val (bm, _) = renderPage(r, i, 2000)
                         res.add(Ocr.recognize(t, bm))
                         bm.recycle()
@@ -1669,12 +1689,12 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     dlg.dismiss()
                     texts_reset()
-                    toast(if (cnt == 0) "Bütün səhifələrdə artıq mətn var — OCR lazım deyil" else "$cnt səhifə tanındı ✓ İndi axtara bilərsən")
+                    toast(if (cnt == 0) tr(R.string.butun_sehifelerde_artiq_metn_var_ocr_laz) else tr(R.string.p1_s_sehife_tanindi_indi_axtara_bilersen, cnt))
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast(if (e is java.io.IOException) "Dil faylları yüklənmədi — interneti yoxla" else "OCR alınmadı")
+                    toast(if (e is java.io.IOException) tr(R.string.dil_fayllari_yuklenmedi_interneti_yoxla) else tr(R.string.ocr_alinmadi))
                 }
             }
         }
@@ -1691,7 +1711,7 @@ class MainActivity : Activity() {
     private fun passwordField(): Pair<FrameLayout, EditText> {
         val et = EditText(this)
         et.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        et.hint = "Şifrə"
+        et.hint = tr(R.string.sifre)
         et.setTextColor(Ui.TEXT)
         et.setHintTextColor(Ui.DIM)
         val box = FrameLayout(this)
@@ -1703,11 +1723,11 @@ class MainActivity : Activity() {
     private fun askPassword(id: String, name: String, wrong: Boolean) {
         val (box, et) = passwordField()
         val d = AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle(if (wrong) "Şifrə səhvdir, yenidən yaz" else "Bu PDF şifrəlidir")
-            .setMessage("«$name» faylını açmaq üçün şifrəni yaz.")
+            .setTitle(if (wrong) tr(R.string.sifre_sehvdir_yeniden_yaz) else tr(R.string.bu_pdf_sifrelidir))
+            .setMessage(tr(R.string.p1_s_faylini_acmaq_ucun_sifreni_yaz, name))
             .setView(box)
-            .setPositiveButton("Aç") { _, _ -> unlock(id, name, et.text.toString()) }
-            .setNegativeButton("Ləğv et") { _, _ ->
+            .setPositiveButton(tr(R.string.ac)) { _, _ -> unlock(id, name, et.text.toString()) }
+            .setNegativeButton(tr(R.string.legv_et)) { _, _ ->
                 if (store.recents().none { it.id == id }) store.pdf(id).delete()
             }
             .create()
@@ -1716,7 +1736,7 @@ class MainActivity : Activity() {
     }
 
     private fun unlock(id: String, name: String, pw: String) {
-        val (dlg, _) = progressDialog("Açılır…")
+        val (dlg, _) = progressDialog(tr(R.string.acilir))
         exec.execute {
             val src = store.pdf(id)
             val tmp = File(store.dir, "tmp_dec_" + System.nanoTime() + ".pdf")
@@ -1729,13 +1749,13 @@ class MainActivity : Activity() {
                 }
                 store.setPassword(id, pw)
                 loadStored(id, name, dlg)
-                runOnUiThread { toast("Saxlayanda şifrə qorunacaq (Alətlər → Şifrə ilə dəyişə bilərsən)") }
+                runOnUiThread { toast(tr(R.string.saxlayanda_sifre_qorunacaq_aletler_sifre)) }
             } catch (e: Throwable) {
                 tmp.delete()
                 runOnUiThread {
                     dlg.dismiss()
                     if (e is com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException) askPassword(id, name, true)
-                    else toast("Bu PDF açıla bilmədi")
+                    else toast(tr(R.string.bu_pdf_acila_bilmedi))
                 }
             }
         }
@@ -1745,43 +1765,282 @@ class MainActivity : Activity() {
         val id = curId ?: return
         val has = store.password(id) != null
         val acts = ArrayList<Pair<String, () -> Unit>>()
-        acts.add((if (has) "Şifrəni dəyiş" else "Şifrə qoy") to {
+        acts.add((if (has) tr(R.string.sifreni_deyis) else tr(R.string.sifre_qoy)) to {
             val (box, et) = passwordField()
             AlertDialog.Builder(this, R.style.NbDialog)
-                .setTitle("Yeni şifrə")
-                .setMessage("Saxlanan və paylaşılan PDF bu şifrə ilə qorunacaq (AES-256).")
+                .setTitle(tr(R.string.yeni_sifre))
+                .setMessage(tr(R.string.saxlanan_ve_paylasilan_pdf_bu_sifre_ile_))
                 .setView(box)
                 .setPositiveButton("OK") { _, _ ->
                     val p = et.text.toString()
-                    if (p.length < 4) toast("Ən azı 4 simvol") else {
+                    if (p.length < 4) toast(tr(R.string.en_azi_4_simvol)) else {
                         store.setPassword(id, p)
-                        toast("Şifrə təyin olundu — saxlayanda tətbiq olunacaq")
+                        toast(tr(R.string.sifre_teyin_olundu_saxlayanda_tetbiq_olu))
                     }
                 }
-                .setNegativeButton("Ləğv et", null)
+                .setNegativeButton(tr(R.string.legv_et), null)
                 .show()
         })
-        if (has) acts.add("Şifrəni sil (saxlananda şifrəsiz olsun)" to {
+        if (has) acts.add(tr(R.string.sifreni_sil_saxlananda_sifresiz_olsun) to {
             store.setPassword(id, null)
-            toast("Şifrə silindi — növbəti saxlamada PDF şifrəsiz olacaq")
+            toast(tr(R.string.sifre_silindi_novbeti_saxlamada_pdf_sifr))
         })
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle(if (has) "Sənəd şifrəlidir" else "Sənəd şifrəsizdir")
+            .setTitle(if (has) tr(R.string.sened_sifrelidir) else tr(R.string.sened_sifresizdir))
             .setItems(acts.map { it.first }.toTypedArray()) { _, w -> acts[w].second() }
             .show()
+    }
+
+    // ======================= ayarlar =======================
+
+    private var settings: FrameLayout? = null
+
+    private fun closeSettings() {
+        settings?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        settings = null
+        if (!inEditor) setBackHandler(false)
+    }
+
+    private val langs = listOf("" to 0, "az" to 0, "ar" to 0, "tr" to 0, "en" to 0, "ru" to 0)
+
+    private fun langName(tag: String): String = when (tag) {
+        "az" -> "Azərbaycanca"
+        "ar" -> "العربية"
+        "tr" -> "Türkçe"
+        "en" -> "English"
+        "ru" -> "Русский"
+        else -> tr(R.string.sistem_dili)
+    }
+
+    private fun openSettings() {
+        closeSettings()
+        val f = FrameLayout(this)
+        f.setBackgroundColor(Ui.BG)
+        f.isClickable = true
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(insL, insT, insR, 0)
+        val head = LinearLayout(this)
+        head.gravity = Gravity.CENTER_VERTICAL
+        head.setPadding(dp(6), 0, dp(6), 0)
+        head.addView(lineBtn(R.drawable.ln_back, tr(R.string.geri), 44) { closeSettings() })
+        val t = label(tr(R.string.ayarlar), 20f, Ui.TEXT, true)
+        t.setPadding(dp(8), 0, 0, 0)
+        head.addView(t, LinearLayout.LayoutParams(0, WC, 1f))
+        col.addView(head, LinearLayout.LayoutParams(MP, dp(56)))
+        val sc = ScrollView(this)
+        val body = LinearLayout(this)
+        body.orientation = LinearLayout.VERTICAL
+        body.setPadding(dp(16), dp(4), dp(16), insB + dp(28))
+
+        fun group(title: String): LinearLayout {
+            val h = label(title.uppercase(), 12f, Ui.DIM, true)
+            h.letterSpacing = 0.1f
+            h.setPadding(dp(6), dp(18), dp(6), dp(8))
+            body.addView(h)
+            val card = LinearLayout(this)
+            card.orientation = LinearLayout.VERTICAL
+            card.background = rounded(Color.WHITE, dpf(18f), Ui.LINE, dp(1))
+            card.elevation = dpf(1f)
+            body.addView(card, LinearLayout.LayoutParams(MP, WC))
+            return card
+        }
+
+        fun row(card: LinearLayout, icon: Int, title: String, sub: String?, right: View? = null, onClick: (() -> Unit)?): TextView? {
+            if (card.childCount > 0) {
+                val d = View(this)
+                d.setBackgroundColor(0x12000000)
+                val lp = LinearLayout.LayoutParams(MP, 1)
+                lp.marginStart = dp(62)
+                card.addView(d, lp)
+            }
+            val r = LinearLayout(this)
+            r.gravity = Gravity.CENTER_VERTICAL
+            r.setPadding(dp(14), dp(12), dp(14), dp(12))
+            r.minimumHeight = dp(60)
+            if (onClick != null) {
+                r.background = ripple(null, false, dpf(18f))
+                r.setOnClickListener { onClick() }
+            }
+            val ic = FrameLayout(this)
+            ic.background = rounded(0xFFF2F2F4.toInt(), dpf(10f))
+            val iv = tintedIcon(icon, Ui.ICON, 20)
+            ic.addView(iv, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            r.addView(ic, LinearLayout.LayoutParams(dp(36), dp(36)))
+            val tc = LinearLayout(this)
+            tc.orientation = LinearLayout.VERTICAL
+            tc.setPadding(dp(14), 0, dp(8), 0)
+            tc.addView(label(title, 15f, Ui.TEXT))
+            var subV: TextView? = null
+            if (sub != null) {
+                subV = label(sub, 12.5f, Ui.DIM)
+                tc.addView(subV)
+            }
+            r.addView(tc, LinearLayout.LayoutParams(0, WC, 1f))
+            if (right != null) r.addView(right) else if (onClick != null) r.addView(tintedIcon(R.drawable.ln_chev, Ui.DIM, 18))
+            card.addView(r, LinearLayout.LayoutParams(MP, WC))
+            return subV
+        }
+
+        fun switch(on: Boolean, set: (Boolean) -> Unit): android.widget.Switch {
+            val sw = android.widget.Switch(this)
+            sw.isChecked = on
+            sw.thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Ui.GOLD, 0xFFFAFAFA.toInt()))
+            sw.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(0x66D9342B, 0x33000000))
+            sw.setOnCheckedChangeListener { _, v -> set(v) }
+            return sw
+        }
+
+        // Görünüş
+        val g1 = group(tr(R.string.gorunus))
+        row(g1, R.drawable.ln_globe, tr(R.string.dil), langName(store.lang)) { chooseLanguage() }
+        val nsw = switch(store.night) { v -> store.night = v; if (::pv.isInitialized) pv.night = v }
+        row(g1, R.drawable.ln_moon, tr(R.string.gece_rejimi), tr(R.string.gece_rejimi_alt), nsw) { nsw.toggle() }
+        val fsw = switch(store.fullscreen) { v -> store.fullscreen = v }
+        row(g1, R.drawable.ln_expand, tr(R.string.tam_ekranda_ac), tr(R.string.tam_ekranda_ac_alt), fsw) { fsw.toggle() }
+
+        // Sənədlər
+        val g2 = group(tr(R.string.senedler))
+        var saveSub: TextView? = null
+        saveSub = row(g2, R.drawable.ln_save, tr(R.string.yadda_saxla_davranisi), tr(if (store.overwrite) R.string.orijinala_yaz else R.string.hemise_yeni_fayl)) {
+            store.overwrite = !store.overwrite
+            saveSub?.text = tr(if (store.overwrite) R.string.orijinala_yaz else R.string.hemise_yeni_fayl)
+        }
+        row(g2, R.drawable.ln_history, tr(R.string.son_acilanlari_temizle), tr(R.string.son_acilanlari_temizle_alt)) {
+            AlertDialog.Builder(this, R.style.NbDialog)
+                .setTitle(tr(R.string.son_acilanlari_temizle))
+                .setMessage(tr(R.string.son_acilanlari_temizle_sual))
+                .setPositiveButton(tr(R.string.temizle)) { _, _ ->
+                    store.clearRecents()
+                    refreshHome()
+                    toast(tr(R.string.temizlendi))
+                }
+                .setNegativeButton(tr(R.string.legv_et), null)
+                .show()
+        }
+
+        // OCR
+        val g3 = group("OCR")
+        var ocrSub: TextView? = null
+        fun ocrState(): String {
+            val dir = File(Ocr.root(this), "tessdata")
+            val mb = (dir.listFiles()?.sumOf { it.length() } ?: 0L) / 1048576.0
+            return if (Ocr.ready(this)) tr(R.string.ocr_yuklenib, String.format(java.util.Locale.US, "%.1f", mb)) else tr(R.string.ocr_yuklenmeyib)
+        }
+        ocrSub = row(g3, R.drawable.ln_ocr, tr(R.string.ocr_dil_fayllari), ocrState()) {
+            if (Ocr.ready(this)) {
+                AlertDialog.Builder(this, R.style.NbDialog)
+                    .setTitle(tr(R.string.ocr_dil_fayllari))
+                    .setMessage(tr(R.string.ocr_sil_sual))
+                    .setPositiveButton(tr(R.string.sil)) { _, _ ->
+                        Ocr.root(this).deleteRecursively()
+                        ocrSub?.text = ocrState()
+                    }
+                    .setNegativeButton(tr(R.string.legv_et), null)
+                    .show()
+            } else {
+                val (dlg, tv) = progressDialog(tr(R.string.hazirlanir))
+                exec.execute {
+                    try {
+                        Ocr.download(this) { l -> runOnUiThread { tv.text = tr(R.string.dil_fayli_yuklenir_p1_s, l) } }
+                        runOnUiThread { dlg.dismiss(); ocrSub?.text = ocrState() }
+                    } catch (e: Throwable) {
+                        runOnUiThread { dlg.dismiss(); toast(tr(R.string.dil_fayllari_yuklenmedi_interneti_yoxla)) }
+                    }
+                }
+            }
+        }
+
+        // Haqqında və əlaqə
+        val g4 = group(tr(R.string.haqqinda))
+        row(g4, R.drawable.ln_info, tr(R.string.app_name), tr(R.string.versiya, BuildConfig.VERSION_NAME), null, null)
+        row(g4, R.drawable.ln_mail, tr(R.string.e_poct), "nibrascode@gmail.com") {
+            val i = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:nibrascode@gmail.com"))
+            i.putExtra(Intent.EXTRA_SUBJECT, "Nibras PDF " + BuildConfig.VERSION_NAME)
+            openSafe(Intent.createChooser(i, tr(R.string.e_poct)))
+        }
+        row(g4, R.drawable.ln_web, tr(R.string.veb_sayt), "nibrascode.com") {
+            openSafe(Intent(Intent.ACTION_VIEW, Uri.parse("https://nibrascode.com")))
+        }
+        row(g4, R.drawable.ln_shield, tr(R.string.mexfilik_siyaseti), null) { showPrivacy() }
+        row(g4, R.drawable.ln_star, tr(R.string.qiymetlendir), tr(R.string.qiymetlendir_alt)) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")))
+            } catch (e: Exception) {
+                openSafe(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")))
+            }
+        }
+        val foot = label("© Nibras Code", 12f, Ui.DIM)
+        foot.gravity = Gravity.CENTER
+        foot.setPadding(0, dp(22), 0, 0)
+        body.addView(foot, LinearLayout.LayoutParams(MP, WC))
+
+        sc.addView(body, FrameLayout.LayoutParams(MP, WC))
+        col.addView(sc, LinearLayout.LayoutParams(MP, 0, 1f))
+        f.addView(col, FrameLayout.LayoutParams(MP, MP))
+        (home.parent as FrameLayout).addView(f, FrameLayout.LayoutParams(MP, MP))
+        settings = f
+        setBackHandler(true)
+        if (inEditor) setChrome(true)
+    }
+
+    private fun openSafe(i: Intent) {
+        try {
+            startActivity(i)
+        } catch (e: Exception) {
+            toast(tr(R.string.acmaq_olmadi))
+        }
+    }
+
+    private fun showPrivacy() {
+        val wv = android.webkit.WebView(this)
+        wv.settings.javaScriptEnabled = false
+        wv.loadUrl("file:///android_asset/privacy.html")
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setView(wv)
+            .setPositiveButton(tr(R.string.bagla), null)
+            .show()
+    }
+
+    private fun chooseLanguage() {
+        val tags = langs.map { it.first }
+        val cur = tags.indexOf(store.lang).coerceAtLeast(0)
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle(tr(R.string.dil))
+            .setSingleChoiceItems(tags.map { langName(it) }.toTypedArray(), cur) { d, w ->
+                d.dismiss()
+                applyLanguage(tags[w])
+            }
+            .show()
+    }
+
+    private fun applyLanguage(tag: String) {
+        if (tag == store.lang) return
+        store.lang = tag
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                val lm = getSystemService(android.app.LocaleManager::class.java)
+                lm.applicationLocales = if (tag.isEmpty()) android.os.LocaleList.getEmptyLocaleList() else android.os.LocaleList.forLanguageTags(tag)
+                return
+            } catch (e: Exception) {
+            }
+        }
+        saveAnnotationsNow()
+        recreate()
     }
 
     // ======================= menyu =======================
 
     private fun showMenu() {
         val items = ArrayList<Pair<String, () -> Unit>>()
-        items.add("Yadda saxla" to { save() })
-        items.add("Fərqli saxla…" to { saveAs() })
-        items.add("Paylaş" to { sharePdf() })
-        items.add("Çap et" to { printPdf() })
-        items.add((if (pv.night) "Gündüz rejimi" else "Gecə rejimi") to { toggleNight() })
-        items.add("Səhifəyə keç…" to { jumpDialog() })
+        items.add(tr(R.string.yadda_saxla) to { save() })
+        items.add(tr(R.string.ferqli_saxla_2) to { saveAs() })
+        items.add(tr(R.string.paylas) to { sharePdf() })
+        items.add(tr(R.string.cap_et) to { printPdf() })
+        items.add((if (pv.night) tr(R.string.gunduz_rejimi) else tr(R.string.gece_rejimi)) to { toggleNight() })
+        items.add(tr(R.string.sehifeye_kec_2) to { jumpDialog() })
         moreItems(items)
+        items.add(tr(R.string.ayarlar) to { openSettings() })
         val pm = android.widget.PopupMenu(this, btnMore)
         items.forEachIndexed { i, it -> pm.menu.add(0, i, i, it.first) }
         pm.setOnMenuItemClickListener { mi ->
@@ -1792,12 +2051,12 @@ class MainActivity : Activity() {
     }
 
     private fun moreItems(items: ArrayList<Pair<String, () -> Unit>>) {
-        items.add(2, "Səhifələr (düzəlt, döndər, sil)" to { openGrid() })
-        items.add("PDF birləşdir…" to { pickMerge() })
-        items.add("Səhifələri ayrıca PDF kimi çıxar…" to { extractDialog() })
-        items.add("PDF-i böl…" to { splitDialog() })
-        items.add("Səhifəni şəkil kimi saxla" to { exportPng(page) })
-        items.add("Bütün səhifələri şəkil kimi paylaş" to { shareImages() })
+        items.add(2, tr(R.string.sehifeler_duzelt_donder_sil) to { openGrid() })
+        items.add(tr(R.string.pdf_birlesdir) to { pickMerge() })
+        items.add(tr(R.string.sehifeleri_ayrica_pdf_kimi_cixar) to { extractDialog() })
+        items.add(tr(R.string.pdf_i_bol) to { splitDialog() })
+        items.add(tr(R.string.sehifeni_sekil_kimi_saxla) to { exportPng(page) })
+        items.add(tr(R.string.butun_sehifeleri_sekil_kimi_paylas) to { shareImages() })
     }
 
     // ======================= səhifələrin idarəsi =======================
@@ -1834,14 +2093,14 @@ class MainActivity : Activity() {
         val head = LinearLayout(this)
         head.gravity = Gravity.CENTER_VERTICAL
         head.setPadding(dp(6), 0, dp(6), 0)
-        head.addView(iconButton(R.drawable.ic_back, "Geri") { closeGrid() })
-        val t = label("Səhifələr", 17f, Ui.TEXT, true)
+        head.addView(iconButton(R.drawable.ic_back, tr(R.string.geri)) { closeGrid() })
+        val t = label(tr(R.string.sehifeler), 17f, Ui.TEXT, true)
         t.setPadding(dp(6), 0, 0, 0)
         head.addView(t, LinearLayout.LayoutParams(0, WC, 1f))
-        head.addView(iconButton(R.drawable.ic_add, "Boş səhifə əlavə et", Ui.TEXT, 44, 10) { insertBlank(pages.size - 1) })
-        head.addView(iconButton(R.drawable.ic_doc, "PDF birləşdir", Ui.GOLD, 44, 10) { pickMerge() })
+        head.addView(iconButton(R.drawable.ic_add, tr(R.string.bos_sehife_elave_et), Ui.TEXT, 44, 10) { insertBlank(pages.size - 1) })
+        head.addView(iconButton(R.drawable.ic_doc, tr(R.string.pdf_birlesdir_2), Ui.GOLD, 44, 10) { pickMerge() })
         col.addView(head, LinearLayout.LayoutParams(MP, dp(56)))
-        val hint = label("Toxun — səhifəyə keç · Uzun bas — döndər, köçür, sil, çıxar", 12f, Ui.DIM)
+        val hint = label(tr(R.string.toxun_sehifeye_kec_uzun_bas_donder_kocur), 12f, Ui.DIM)
         hint.setPadding(dp(16), 0, dp(16), dp(8))
         col.addView(hint)
         val gv = android.widget.GridView(this)
@@ -1928,27 +2187,27 @@ class MainActivity : Activity() {
 
     private fun pageActions(p: Int) {
         val acts = ArrayList<Pair<String, () -> Unit>>()
-        acts.add("Sağa döndər ↻" to { rotatePage(p, 90) })
-        acts.add("Sola döndər ↺" to { rotatePage(p, -90) })
-        if (p > 0) acts.add("Əvvələ köçür" to { movePage(p, p - 1) })
-        if (p < pages.size - 1) acts.add("Sonraya köçür" to { movePage(p, p + 1) })
-        if (p > 0) acts.add("Ən əvvələ köçür" to { movePage(p, 0) })
-        acts.add("Dublikat et" to { duplicatePage(p) })
-        acts.add("Sonrasına boş səhifə əlavə et" to { insertBlank(p) })
-        acts.add("Bu səhifəni ayrıca PDF kimi çıxar" to { extractPages(setOf(p), "_s" + (p + 1)) })
-        acts.add("Şəkil kimi saxla" to { exportPng(p) })
-        if (pages.size > 1) acts.add("Sil" to { confirmDeletePage(p) })
+        acts.add(tr(R.string.saga_donder_2) to { rotatePage(p, 90) })
+        acts.add(tr(R.string.sola_donder_2) to { rotatePage(p, -90) })
+        if (p > 0) acts.add(tr(R.string.evvele_kocur) to { movePage(p, p - 1) })
+        if (p < pages.size - 1) acts.add(tr(R.string.sonraya_kocur) to { movePage(p, p + 1) })
+        if (p > 0) acts.add(tr(R.string.en_evvele_kocur) to { movePage(p, 0) })
+        acts.add(tr(R.string.dublikat_et) to { duplicatePage(p) })
+        acts.add(tr(R.string.sonrasina_bos_sehife_elave_et) to { insertBlank(p) })
+        acts.add(tr(R.string.bu_sehifeni_ayrica_pdf_kimi_cixar) to { extractPages(setOf(p), "_s" + (p + 1)) })
+        acts.add(tr(R.string.sekil_kimi_saxla) to { exportPng(p) })
+        if (pages.size > 1) acts.add(tr(R.string.sil) to { confirmDeletePage(p) })
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Səhifə ${p + 1}")
+            .setTitle(tr(R.string.sehife_p1_s, p + 1))
             .setItems(acts.map { it.first }.toTypedArray()) { _, w -> acts[w].second() }
             .show()
     }
 
     private fun confirmDeletePage(p: Int) {
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Səhifə ${p + 1} silinsin?")
-            .setMessage("Səhifə və onun üzərindəki qeydlər silinəcək.")
-            .setPositiveButton("Sil") { _, _ ->
+            .setTitle(tr(R.string.sehife_p1_s_silinsin, p + 1))
+            .setMessage(tr(R.string.sehife_ve_onun_uzerindeki_qeydler_siline))
+            .setPositiveButton(tr(R.string.sil)) { _, _ ->
                 val specs = ArrayList<PageSpec>()
                 val np = ArrayList<PageData>()
                 for (i in pages.indices) if (i != p) {
@@ -1957,7 +2216,7 @@ class MainActivity : Activity() {
                 }
                 applyPages(specs, np, emptyList(), min(page, specs.size - 1))
             }
-            .setNegativeButton("Ləğv et", null)
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 
@@ -2048,7 +2307,7 @@ class MainActivity : Activity() {
         saveAnnotationsNow()
         val curJson = annsToJson(pages)
         val curPage = page
-        val (dlg, _) = progressDialog("Səhifələr yenilənir…")
+        val (dlg, _) = progressDialog(tr(R.string.sehifeler_yenilenir))
         exec.execute {
             val tmp = File(store.dir, "tmp_ops_" + System.nanoTime() + ".pdf")
             val snap = File(store.dir, id + "_hist_" + System.nanoTime() + ".pdf")
@@ -2107,9 +2366,9 @@ class MainActivity : Activity() {
                 snap.delete()
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Əməliyyat alınmadı")
+                    toast(tr(R.string.emeliyyat_alinmadi))
                     if (curId != null) {
-                        val (d2, _) = progressDialog("Açılır…")
+                        val (d2, _) = progressDialog(tr(R.string.acilir))
                         exec.execute { loadStored(id, docName, d2) }
                     }
                 }
@@ -2126,7 +2385,7 @@ class MainActivity : Activity() {
     }
 
     private fun mergePdf(u: Uri) {
-        val (dlg, _) = progressDialog("Hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
                 val f = File(cacheDir, "merge_" + System.nanoTime() + ".pdf")
@@ -2146,12 +2405,12 @@ class MainActivity : Activity() {
                         np.add(PageData())
                     }
                     applyPages(specs, np, listOf(f), first)
-                    toast("$n səhifə sona əlavə olunur")
+                    toast(tr(R.string.p1_s_sehife_sona_elave_olunur, n))
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Bu PDF birləşdirilə bilmədi")
+                    toast(tr(R.string.bu_pdf_birlesdirile_bilmedi))
                 }
             }
         }
@@ -2189,21 +2448,21 @@ class MainActivity : Activity() {
             .setTitle(title)
             .setView(box)
             .setPositiveButton("OK") { _, _ -> ok(et.text.toString()) }
-            .setNegativeButton("Ləğv et", null)
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 
     private fun extractDialog() {
         if (renderer == null) return
-        inputDialog("Hansı səhifələr? (1–${pages.size})", "məs: 1-3, 5, 8", "${page + 1}", false) { s ->
+        inputDialog(tr(R.string.hansi_sehifeler_1_p1_s, pages.size), tr(R.string.mes_1_3_5_8), "${page + 1}", false) { s ->
             val set = parseRange(s, pages.size)
-            if (set.isEmpty()) toast("Səhifə aralığı düzgün deyil") else extractPages(set, "_secilmis")
+            if (set.isEmpty()) toast(tr(R.string.sehife_araligi_duzgun_deyil)) else extractPages(set, "_secilmis")
         }
     }
 
     private fun extractPages(set: Set<Int>, suffix: String) {
         val snap = snapshot()
-        val (dlg, _) = progressDialog("Hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
                 val f = File(cacheDir, "pending.pdf")
@@ -2221,7 +2480,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Çıxarmaq alınmadı")
+                    toast(tr(R.string.cixarmaq_alinmadi))
                 }
             }
         }
@@ -2235,7 +2494,7 @@ class MainActivity : Activity() {
                 f.delete()
                 runOnUiThread { showSaved(u, true) }
             } catch (e: Throwable) {
-                runOnUiThread { toast("Saxlama xətası") }
+                runOnUiThread { toast(tr(R.string.saxlama_xetasi)) }
             }
         }
     }
@@ -2243,16 +2502,16 @@ class MainActivity : Activity() {
     private fun splitDialog() {
         if (renderer == null) return
         if (pages.size < 2) {
-            toast("Bölmək üçün ən azı 2 səhifə lazımdır")
+            toast(tr(R.string.bolmek_ucun_en_azi_2_sehife_lazimdir))
             return
         }
-        inputDialog("Hər faylda neçə səhifə olsun?", "məs: 1", "1", true) { s ->
+        inputDialog(tr(R.string.her_faylda_nece_sehife_olsun), tr(R.string.mes_1), "1", true) { s ->
             val n = s.toIntOrNull()
             if (n == null || n < 1 || n >= pages.size) {
-                toast("1 ilə ${pages.size - 1} arasında rəqəm yaz")
+                toast(tr(R.string.n1_ile_p1_s_arasinda_reqem_yaz, pages.size - 1))
             } else {
                 splitN = n
-                toast("Faylların saxlanacağı qovluğu seç")
+                toast(tr(R.string.fayllarin_saxlanacagi_qovlugu_sec))
                 startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_SPLIT)
             }
         }
@@ -2263,7 +2522,7 @@ class MainActivity : Activity() {
         if (n < 1) return
         val snap = snapshot()
         val total = pages.size
-        val (dlg, tv) = progressDialog("Bölünür…")
+        val (dlg, tv) = progressDialog(tr(R.string.bolunur))
         exec.execute {
             try {
                 val docId = android.provider.DocumentsContract.getTreeDocumentId(tree)
@@ -2274,7 +2533,7 @@ class MainActivity : Activity() {
                     part++
                     val end = min(total, start + n)
                     val set = (start until end).toSet()
-                    runOnUiThread { tv.text = "Bölünür… $part" }
+                    runOnUiThread { tv.text = tr(R.string.bolunur_p1_s, part) }
                     val name = baseName() + "_" + part + (if (n == 1) "" else "_s${start + 1}-$end") + ".pdf"
                     val du = android.provider.DocumentsContract.createDocument(contentResolver, parent, "application/pdf", name) ?: throw IOException()
                     contentResolver.openOutputStream(du, "wt")?.use { exportTo(it, snap, set) } ?: throw IOException()
@@ -2283,12 +2542,12 @@ class MainActivity : Activity() {
                 val parts = part
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("$parts fayl yaradıldı ✓")
+                    toast(tr(R.string.p1_s_fayl_yaradildi, parts))
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Bölmək alınmadı")
+                    toast(tr(R.string.bolmek_alinmadi))
                 }
             }
         }
@@ -2306,7 +2565,7 @@ class MainActivity : Activity() {
     private fun exportPng(p: Int) {
         val r = renderer ?: return
         val anns = ArrayList(pages[p].anns)
-        val (dlg, _) = progressDialog("Hazırlanır…")
+        val (dlg, _) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
                 val bm = pageImage(r, p, anns)
@@ -2326,7 +2585,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Şəkil yaradıla bilmədi")
+                    toast(tr(R.string.sekil_yaradila_bilmedi))
                 }
             }
         }
@@ -2335,14 +2594,14 @@ class MainActivity : Activity() {
     private fun shareImages() {
         val r = renderer ?: return
         val snap = snapshot()
-        val (dlg, tv) = progressDialog("Hazırlanır…")
+        val (dlg, tv) = progressDialog(tr(R.string.hazirlanir))
         exec.execute {
             try {
                 val dir = ShareProvider.dir(this)
                 val uris = ArrayList<Uri>()
                 val safe = baseName().replace(Regex("[^\\p{L}\\p{N}_-]"), "_")
                 for (p in snap.indices) {
-                    runOnUiThread { tv.text = "Hazırlanır… ${p + 1}/${snap.size}" }
+                    runOnUiThread { tv.text = tr(R.string.hazirlanir_p1_s_p2_s, p + 1, snap.size) }
                     val bm = pageImage(r, p, snap[p])
                     val f = File(dir, safe + "_s" + (p + 1) + ".jpg")
                     f.outputStream().use { bm.compress(Bitmap.CompressFormat.JPEG, 90, it) }
@@ -2358,12 +2617,12 @@ class MainActivity : Activity() {
                     for (k in 1 until uris.size) cd.addItem(android.content.ClipData.Item(uris[k]))
                     i.clipData = cd
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    startActivity(Intent.createChooser(i, "Şəkilləri paylaş"))
+                    startActivity(Intent.createChooser(i, tr(R.string.sekilleri_paylas)))
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Paylaşmaq mümkün olmadı")
+                    toast(tr(R.string.paylasmaq_mumkun_olmadi))
                 }
             }
         }
@@ -2415,7 +2674,7 @@ class MainActivity : Activity() {
                     }
                 }
             } catch (e: Throwable) {
-                runOnUiThread { searchCount.text = "xəta" }
+                runOnUiThread { searchCount.text = tr(R.string.xeta) }
             }
         }
     }
@@ -2429,12 +2688,12 @@ class MainActivity : Activity() {
             val noText = texts?.all { it.text.isBlank() } == true
             if (noText) {
                 AlertDialog.Builder(this, R.style.NbDialog)
-                    .setTitle("Mətn qatı yoxdur")
-                    .setMessage("Bu PDF skan edilmiş görünür. Axtarmaq üçün əvvəlcə mətni tanıyaq (OCR)?")
+                    .setTitle(tr(R.string.metn_qati_yoxdur))
+                    .setMessage(tr(R.string.bu_pdf_skan_edilmis_gorunur_axtarmaq_ucu))
                     .setPositiveButton("OCR et") { _, _ -> ocrAll() }
-                    .setNegativeButton("Bağla", null)
+                    .setNegativeButton(tr(R.string.bagla), null)
                     .show()
-            } else toast("Tapılmadı")
+            } else toast(tr(R.string.tapilmadi))
             return
         }
         hitIdx = h.indexOfFirst { it.page >= page }.let { if (it < 0) 0 else it }
@@ -2477,7 +2736,7 @@ class MainActivity : Activity() {
         bar.setPadding(dp(12), 0, dp(4), 0)
         bar.addView(tintedIcon(R.drawable.ic_search, Ui.GOLD, 20))
         searchEt = EditText(this)
-        searchEt.hint = "Mətndə axtar…"
+        searchEt.hint = tr(R.string.metnde_axtar)
         searchEt.setTextColor(Ui.TEXT)
         searchEt.setHintTextColor(Ui.DIM)
         searchEt.background = null
@@ -2501,13 +2760,13 @@ class MainActivity : Activity() {
         searchCount = label("", 12f, Ui.DIM, true)
         searchCount.setPadding(dp(4), 0, dp(4), 0)
         bar.addView(searchCount)
-        val up = iconButton(R.drawable.ic_chev_l, "Əvvəlki", Ui.TEXT, 36, 8) { stepHit(-1) }
+        val up = iconButton(R.drawable.ic_chev_l, tr(R.string.evvelki), Ui.TEXT, 36, 8) { stepHit(-1) }
         up.rotation = 90f
-        val dn = iconButton(R.drawable.ic_chev_r, "Növbəti", Ui.TEXT, 36, 8) { stepHit(1) }
+        val dn = iconButton(R.drawable.ic_chev_r, tr(R.string.novbeti), Ui.TEXT, 36, 8) { stepHit(1) }
         dn.rotation = 90f
         bar.addView(up)
         bar.addView(dn)
-        bar.addView(iconButton(R.drawable.ic_close, "Bağla", Ui.DIM, 36, 9) { closeSearch() })
+        bar.addView(iconButton(R.drawable.ic_close, tr(R.string.bagla), Ui.DIM, 36, 9) { closeSearch() })
         bar.visibility = View.GONE
         return bar
     }
@@ -2523,13 +2782,13 @@ class MainActivity : Activity() {
         box.setPadding(dp(22), dp(8), dp(22), 0)
         box.addView(et, FrameLayout.LayoutParams(MP, WC))
         AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle("Səhifəyə keç (1–${pages.size})")
+            .setTitle(tr(R.string.sehifeye_kec_1_p1_s, pages.size))
             .setView(box)
-            .setPositiveButton("Keç") { _, _ ->
+            .setPositiveButton(tr(R.string.kec)) { _, _ ->
                 val n = et.text.toString().toIntOrNull()
                 if (n != null) showPage((n - 1).coerceIn(0, pages.size - 1))
             }
-            .setNegativeButton("Ləğv et", null)
+            .setNegativeButton(tr(R.string.legv_et), null)
             .show()
     }
 }

@@ -16,9 +16,9 @@ android {
         applicationId = "com.nibrascode.pdf"
         minSdk = 26
         targetSdk = 36
-        // Play hər yükləmədə daha böyük versionCode tələb edir: GitHub run nömrəsi avtomatik artır
-        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "2.2.0"
+        // İlk Play buraxılışı. Hər yeni Play yükləməsində versionCode-u 1 artır
+        versionCode = 1
+        versionName = "1.0.0"
         // Telefonlar üçün kifayətdir; APK həcmini kiçildir (OCR native kitabxanaları)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -47,9 +47,17 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        generateLocaleConfig = false
     }
 
     lint {
