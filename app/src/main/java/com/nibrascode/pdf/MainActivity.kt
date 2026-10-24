@@ -200,14 +200,25 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (inEditor) goHome() else super.onBackPressed()
+        if (inEditor) onBack() else super.onBackPressed()
+    }
+
+    // Geri: əvvəlcə açıq panelləri bağlayır
+    private fun onBack() {
+        if (grid?.visibility == View.VISIBLE) {
+            closeGrid()
+        } else if (::searchBar.isInitialized && searchBar.visibility == View.VISIBLE) {
+            closeSearch()
+        } else {
+            goHome()
+        }
     }
 
     private fun setBackHandler(on: Boolean) {
         if (Build.VERSION.SDK_INT >= 33) {
             val d = onBackInvokedDispatcher
             if (on && backCb == null) {
-                val cb = OnBackInvokedCallback { goHome() }
+                val cb = OnBackInvokedCallback { onBack() }
                 d.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
                 backCb = cb
             } else if (!on) {
@@ -723,11 +734,11 @@ class MainActivity : Activity() {
                 openUri(u, keep)
             }
             REQ_SAVE -> savePdf(u, true)
-            //REQ_MERGE -> mergePdf(u)
+            REQ_MERGE -> mergePdf(u)
             REQ_IMAGE -> insertImage(u)
-            //REQ_EXTRACT -> writePending(u)
-            //REQ_SPLIT -> splitInto(u)
-            //REQ_PNG -> writePending(u)
+            REQ_EXTRACT -> writePending(u)
+            REQ_SPLIT -> splitInto(u)
+            REQ_PNG -> writePending(u)
         }
     }
 
@@ -877,6 +888,7 @@ class MainActivity : Activity() {
     private fun goHome() {
         ui.removeCallbacks(saveRunnable)
         saveAnnotationsNow()
+        closeGrid()
         closeDoc()
         pv.clear()
         inEditor = false
@@ -1319,6 +1331,548 @@ class MainActivity : Activity() {
     }
 
     private fun moreItems(items: ArrayList<Pair<String, () -> Unit>>) {
+        items.add(2, "Səhifələr (düzəlt, döndər, sil)" to { openGrid() })
+        items.add("PDF birləşdir…" to { pickMerge() })
+        items.add("Səhifələri ayrıca PDF kimi çıxar…" to { extractDialog() })
+        items.add("PDF-i böl…" to { splitDialog() })
+        items.add("Səhifəni şəkil kimi saxla" to { exportPng(page) })
+        items.add("Bütün səhifələri şəkil kimi paylaş" to { shareImages() })
+    }
+
+    // ======================= səhifələrin idarəsi =======================
+
+    private var grid: FrameLayout? = null
+    private var gridView: android.widget.GridView? = null
+    private var thumbs = arrayOfNulls<Bitmap>(0)
+    private var pendingFile: File? = null
+    private var pendingMime = "application/pdf"
+    private var splitN = 0
+
+    private fun openGrid() {
+        if (renderer == null) return
+        val g = grid ?: buildGrid().also { grid = it }
+        if (thumbs.size != pages.size) thumbs = arrayOfNulls(pages.size)
+        (gridView?.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged()
+        g.setPadding(insL, insT, insR, insB)
+        g.visibility = View.VISIBLE
+        g.alpha = 0f
+        g.animate().alpha(1f).setDuration(160).start()
+        gridView?.setSelection(page)
+    }
+
+    private fun closeGrid() {
+        grid?.visibility = View.GONE
+    }
+
+    private fun buildGrid(): FrameLayout {
+        val f = FrameLayout(this)
+        f.setBackgroundColor(Ui.BG)
+        f.isClickable = true
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        val head = LinearLayout(this)
+        head.gravity = Gravity.CENTER_VERTICAL
+        head.setPadding(dp(6), 0, dp(6), 0)
+        head.addView(iconButton(R.drawable.ic_back, "Geri") { closeGrid() })
+        val t = label("Səhifələr", 17f, Ui.TEXT, true)
+        t.setPadding(dp(6), 0, 0, 0)
+        head.addView(t, LinearLayout.LayoutParams(0, WC, 1f))
+        head.addView(iconButton(R.drawable.ic_add, "Boş səhifə əlavə et", Ui.TEXT, 44, 10) { insertBlank(pages.size - 1) })
+        head.addView(iconButton(R.drawable.ic_doc, "PDF birləşdir", Ui.GOLD, 44, 10) { pickMerge() })
+        col.addView(head, LinearLayout.LayoutParams(MP, dp(56)))
+        val hint = label("Toxun — səhifəyə keç · Uzun bas — döndər, köçür, sil, çıxar", 12f, Ui.DIM)
+        hint.setPadding(dp(16), 0, dp(16), dp(8))
+        col.addView(hint)
+        val gv = android.widget.GridView(this)
+        gv.numColumns = android.widget.GridView.AUTO_FIT
+        gv.columnWidth = dp(110)
+        gv.stretchMode = android.widget.GridView.STRETCH_COLUMN_WIDTH
+        gv.verticalSpacing = dp(12)
+        gv.horizontalSpacing = dp(12)
+        gv.setPadding(dp(14), dp(4), dp(14), dp(24))
+        gv.clipToPadding = false
+        gv.selector = android.graphics.drawable.ColorDrawable(0)
+        gv.adapter = object : android.widget.BaseAdapter() {
+            override fun getCount(): Int = pages.size
+            override fun getItem(p: Int): Any = p
+            override fun getItemId(p: Int): Long = p.toLong()
+            override fun getView(p: Int, cv: View?, parent: ViewGroup): View {
+                val cell = (cv as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    val iv = ImageView(this@MainActivity)
+                    iv.scaleType = ImageView.ScaleType.FIT_CENTER
+                    iv.adjustViewBounds = false
+                    addView(iv, LinearLayout.LayoutParams(MP, dp(140)))
+                    val tv = label("", 12f, Ui.DIM, true)
+                    tv.gravity = Gravity.CENTER
+                    tv.setPadding(0, dp(6), 0, 0)
+                    addView(tv, LinearLayout.LayoutParams(MP, WC))
+                }
+                val iv = cell.getChildAt(0) as ImageView
+                val tv = cell.getChildAt(1) as TextView
+                val cur = p == page
+                iv.background = rounded(Ui.SURFACE, dpf(8f), if (cur) Ui.GOLD else Ui.LINE, dp(if (cur) 2 else 1))
+                iv.setPadding(dp(4), dp(4), dp(4), dp(4))
+                tv.text = (p + 1).toString()
+                tv.setTextColor(if (cur) Ui.GOLD else Ui.DIM)
+                val b = thumbs.getOrNull(p)
+                iv.setImageBitmap(b)
+                if (b == null) requestThumb(p)
+                return cell
+            }
+        }
+        gv.setOnItemClickListener { _, _, p, _ ->
+            closeGrid()
+            showPage(p)
+        }
+        gv.setOnItemLongClickListener { _, v, p, _ ->
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            pageActions(p)
+            true
+        }
+        gridView = gv
+        col.addView(gv, LinearLayout.LayoutParams(MP, 0, 1f))
+        f.addView(col, FrameLayout.LayoutParams(MP, MP))
+        f.visibility = View.GONE
+        (editor.parent as FrameLayout).addView(f, FrameLayout.LayoutParams(MP, MP))
+        return f
+    }
+
+    private val thumbBusy = HashSet<Int>()
+
+    private fun requestThumb(p: Int) {
+        val r = renderer ?: return
+        if (!thumbBusy.add(p)) return
+        val ver = docVer
+        val anns = ArrayList(pages[p].anns)
+        exec.execute {
+            try {
+                val (bm, _) = renderPage(r, p, dp(110) * 2 / 2 + 120)
+                val c = android.graphics.Canvas(bm)
+                val pt = Paint()
+                for (a in anns) drawAnn(c, a, 0f, 0f, bm.width.toFloat(), bm.height.toFloat(), pt)
+                runOnUiThread {
+                    thumbBusy.remove(p)
+                    if (ver == docVer && p < thumbs.size) {
+                        thumbs[p] = bm
+                        (gridView?.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged()
+                    }
+                }
+            } catch (e: Throwable) {
+                runOnUiThread { thumbBusy.remove(p) }
+            }
+        }
+    }
+
+    private fun pageActions(p: Int) {
+        val acts = ArrayList<Pair<String, () -> Unit>>()
+        acts.add("Sağa döndər ↻" to { rotatePage(p, 90) })
+        acts.add("Sola döndər ↺" to { rotatePage(p, -90) })
+        if (p > 0) acts.add("Əvvələ köçür" to { movePage(p, p - 1) })
+        if (p < pages.size - 1) acts.add("Sonraya köçür" to { movePage(p, p + 1) })
+        if (p > 0) acts.add("Ən əvvələ köçür" to { movePage(p, 0) })
+        acts.add("Dublikat et" to { duplicatePage(p) })
+        acts.add("Sonrasına boş səhifə əlavə et" to { insertBlank(p) })
+        acts.add("Bu səhifəni ayrıca PDF kimi çıxar" to { extractPages(setOf(p), "_s" + (p + 1)) })
+        acts.add("Şəkil kimi saxla" to { exportPng(p) })
+        if (pages.size > 1) acts.add("Sil" to { confirmDeletePage(p) })
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle("Səhifə ${p + 1}")
+            .setItems(acts.map { it.first }.toTypedArray()) { _, w -> acts[w].second() }
+            .show()
+    }
+
+    private fun confirmDeletePage(p: Int) {
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle("Səhifə ${p + 1} silinsin?")
+            .setMessage("Səhifə və onun üzərindəki qeydlər silinəcək.")
+            .setPositiveButton("Sil") { _, _ ->
+                val specs = ArrayList<PageSpec>()
+                val np = ArrayList<PageData>()
+                for (i in pages.indices) if (i != p) {
+                    specs.add(PageSpec(0, i))
+                    np.add(pages[i])
+                }
+                applyPages(specs, np, emptyList(), min(page, specs.size - 1))
+            }
+            .setNegativeButton("Ləğv et", null)
+            .show()
+    }
+
+    private fun freshCopy(pd: PageData): PageData {
+        val n = PageData()
+        for (a in pd.anns) {
+            val c = Ann(a.type, a.ink, a.w, a.text)
+            c.p.addAll(a.p)
+            n.anns.add(c)
+        }
+        return n
+    }
+
+    private fun rotatePage(p: Int, deg: Int) {
+        val specs = pages.indices.map { PageSpec(0, it, if (it == p) deg else 0) }
+        val np = ArrayList(pages)
+        val pd = freshCopy(pages[p])
+        for (a in pd.anns) rotateAnn(a, deg > 0)
+        np[p] = pd
+        applyPages(specs, np, emptyList(), p)
+    }
+
+    private fun movePage(from: Int, to: Int) {
+        val order = pages.indices.toMutableList()
+        val x = order.removeAt(from)
+        order.add(to, x)
+        applyPages(order.map { PageSpec(0, it) }, order.map { pages[it] }, emptyList(), to)
+    }
+
+    private fun duplicatePage(p: Int) {
+        val specs = ArrayList<PageSpec>()
+        val np = ArrayList<PageData>()
+        for (i in pages.indices) {
+            specs.add(PageSpec(0, i))
+            np.add(pages[i])
+            if (i == p) {
+                specs.add(PageSpec(0, i))
+                np.add(freshCopy(pages[i]))
+            }
+        }
+        applyPages(specs, np, emptyList(), p + 1)
+    }
+
+    private fun insertBlank(after: Int) {
+        val r = renderer ?: return
+        exec.execute {
+            var w = 595f
+            var h = 842f
+            try {
+                val pg = r.openPage(after.coerceIn(0, r.pageCount - 1))
+                w = pg.width.toFloat()
+                h = pg.height.toFloat()
+                pg.close()
+            } catch (e: Throwable) {
+            }
+            runOnUiThread {
+                val specs = ArrayList<PageSpec>()
+                val np = ArrayList<PageData>()
+                for (i in pages.indices) {
+                    specs.add(PageSpec(0, i))
+                    np.add(pages[i])
+                    if (i == after) {
+                        specs.add(PageSpec(0, -1, 0, w, h))
+                        np.add(PageData())
+                    }
+                }
+                applyPages(specs, np, emptyList(), after + 1)
+            }
+        }
+    }
+
+    // Yeni səhifə sırasını PdfBox ilə yazır, sənədi yenidən açır
+    private fun applyPages(specs: List<PageSpec>, np: List<PageData>, extra: List<File>, goTo: Int) {
+        val id = curId ?: return
+        saveAnnotationsNow()
+        val (dlg, _) = progressDialog("Səhifələr yenilənir…")
+        exec.execute {
+            val tmp = File(store.dir, "tmp_ops_" + System.nanoTime() + ".pdf")
+            try {
+                PdfOps.rebuild(listOf(store.pdf(id)) + extra, specs, tmp)
+                // köhnə rendereri bağla, faylı əvəz et, yenidən aç
+                try {
+                    renderer?.close()
+                    pfd?.close()
+                } catch (e: Exception) {
+                }
+                val dest = store.pdf(id)
+                dest.delete()
+                if (!tmp.renameTo(dest)) {
+                    tmp.copyTo(dest, true)
+                    tmp.delete()
+                }
+                val fd = ParcelFileDescriptor.open(dest, ParcelFileDescriptor.MODE_READ_ONLY)
+                val r = PdfRenderer(fd)
+                for (f in extra) f.delete()
+                runOnUiThread {
+                    dlg.dismiss()
+                    renderer = r
+                    pfd = fd
+                    pages.clear()
+                    for (pd in np) pages.add(pd)
+                    resetDocState()
+                    thumbs = arrayOfNulls(pages.size)
+                    thumbBusy.clear()
+                    store.thumb(id).delete()
+                    store.touch(id, docName, pages.size)
+                    titleSub.text = "${pages.size} səhifə"
+                    saveAnnotationsNow()
+                    (gridView?.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged()
+                    showPage(goTo.coerceIn(0, pages.size - 1))
+                }
+            } catch (e: Throwable) {
+                tmp.delete()
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Əməliyyat alınmadı")
+                    // renderer bağlanıbsa, sənədi yenidən aç
+                    if (curId != null) {
+                        val (d2, _) = progressDialog("Açılır…")
+                        exec.execute { loadStored(id, docName, d2) }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun pickMerge() {
+        if (renderer == null) return
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        i.addCategory(Intent.CATEGORY_OPENABLE)
+        i.type = "application/pdf"
+        startActivityForResult(i, REQ_MERGE)
+    }
+
+    private fun mergePdf(u: Uri) {
+        val (dlg, _) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                val f = File(cacheDir, "merge_" + System.nanoTime() + ".pdf")
+                contentResolver.openInputStream(u)?.use { i -> f.outputStream().use { o -> i.copyTo(o) } } ?: throw IOException()
+                val n = PdfOps.pageCount(f)
+                runOnUiThread {
+                    dlg.dismiss()
+                    val first = pages.size
+                    val specs = ArrayList<PageSpec>()
+                    val np = ArrayList<PageData>()
+                    for (i in pages.indices) {
+                        specs.add(PageSpec(0, i))
+                        np.add(pages[i])
+                    }
+                    for (i in 0 until n) {
+                        specs.add(PageSpec(1, i))
+                        np.add(PageData())
+                    }
+                    applyPages(specs, np, listOf(f), first)
+                    toast("$n səhifə sona əlavə olunur")
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Bu PDF birləşdirilə bilmədi")
+                }
+            }
+        }
+    }
+
+    // "1-3, 5, 8-" kimi aralığı oxuyur (0-dan başlayan indekslər)
+    private fun parseRange(s: String, n: Int): Set<Int> {
+        val out = HashSet<Int>()
+        for (part in s.split(',', ';', ' ').map { it.trim() }.filter { it.isNotEmpty() }) {
+            val m = Regex("^(\\d*)\\s*[-–]\\s*(\\d*)$").find(part)
+            if (m != null) {
+                val a = m.groupValues[1].toIntOrNull() ?: 1
+                val b = m.groupValues[2].toIntOrNull() ?: n
+                for (k in min(a, b)..max(a, b)) if (k in 1..n) out.add(k - 1)
+            } else {
+                val k = part.toIntOrNull()
+                if (k != null && k in 1..n) out.add(k - 1)
+            }
+        }
+        return out
+    }
+
+    private fun inputDialog(title: String, hint: String, initial: String, numeric: Boolean, ok: (String) -> Unit) {
+        val et = EditText(this)
+        et.setText(initial)
+        et.hint = hint
+        et.setTextColor(Ui.TEXT)
+        et.setHintTextColor(Ui.DIM)
+        if (numeric) et.inputType = InputType.TYPE_CLASS_NUMBER
+        et.setSelection(et.text.length)
+        val box = FrameLayout(this)
+        box.setPadding(dp(22), dp(8), dp(22), 0)
+        box.addView(et, FrameLayout.LayoutParams(MP, WC))
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("OK") { _, _ -> ok(et.text.toString()) }
+            .setNegativeButton("Ləğv et", null)
+            .show()
+    }
+
+    private fun extractDialog() {
+        if (renderer == null) return
+        inputDialog("Hansı səhifələr? (1–${pages.size})", "məs: 1-3, 5, 8", "${page + 1}", false) { s ->
+            val set = parseRange(s, pages.size)
+            if (set.isEmpty()) toast("Səhifə aralığı düzgün deyil") else extractPages(set, "_secilmis")
+        }
+    }
+
+    private fun extractPages(set: Set<Int>, suffix: String) {
+        val snap = snapshot()
+        val (dlg, _) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                val f = File(cacheDir, "pending.pdf")
+                f.outputStream().use { exportTo(it, snap, set) }
+                runOnUiThread {
+                    dlg.dismiss()
+                    pendingFile = f
+                    pendingMime = "application/pdf"
+                    val i = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                    i.addCategory(Intent.CATEGORY_OPENABLE)
+                    i.type = "application/pdf"
+                    i.putExtra(Intent.EXTRA_TITLE, baseName() + suffix + ".pdf")
+                    startActivityForResult(i, REQ_EXTRACT)
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Çıxarmaq alınmadı")
+                }
+            }
+        }
+    }
+
+    private fun writePending(u: Uri) {
+        val f = pendingFile ?: return
+        exec.execute {
+            try {
+                contentResolver.openOutputStream(u, "wt")?.use { o -> f.inputStream().use { it.copyTo(o) } } ?: throw IOException()
+                f.delete()
+                runOnUiThread { showSaved(u, true) }
+            } catch (e: Throwable) {
+                runOnUiThread { toast("Saxlama xətası") }
+            }
+        }
+    }
+
+    private fun splitDialog() {
+        if (renderer == null) return
+        if (pages.size < 2) {
+            toast("Bölmək üçün ən azı 2 səhifə lazımdır")
+            return
+        }
+        inputDialog("Hər faylda neçə səhifə olsun?", "məs: 1", "1", true) { s ->
+            val n = s.toIntOrNull()
+            if (n == null || n < 1 || n >= pages.size) {
+                toast("1 ilə ${pages.size - 1} arasında rəqəm yaz")
+            } else {
+                splitN = n
+                toast("Faylların saxlanacağı qovluğu seç")
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_SPLIT)
+            }
+        }
+    }
+
+    private fun splitInto(tree: Uri) {
+        val n = splitN
+        if (n < 1) return
+        val snap = snapshot()
+        val total = pages.size
+        val (dlg, tv) = progressDialog("Bölünür…")
+        exec.execute {
+            try {
+                val docId = android.provider.DocumentsContract.getTreeDocumentId(tree)
+                val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, docId)
+                var part = 0
+                var start = 0
+                while (start < total) {
+                    part++
+                    val end = min(total, start + n)
+                    val set = (start until end).toSet()
+                    runOnUiThread { tv.text = "Bölünür… $part" }
+                    val name = baseName() + "_" + part + (if (n == 1) "" else "_s${start + 1}-$end") + ".pdf"
+                    val du = android.provider.DocumentsContract.createDocument(contentResolver, parent, "application/pdf", name) ?: throw IOException()
+                    contentResolver.openOutputStream(du, "wt")?.use { exportTo(it, snap, set) } ?: throw IOException()
+                    start = end
+                }
+                val parts = part
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("$parts fayl yaradıldı ✓")
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Bölmək alınmadı")
+                }
+            }
+        }
+    }
+
+    // Səhifəni qeydləri ilə birlikdə yüksək keyfiyyətli şəklə çevirir (exec thread)
+    private fun pageImage(r: PdfRenderer, p: Int, anns: List<Ann>): Bitmap {
+        val (bm, _) = renderPage(r, p, 2000)
+        val c = android.graphics.Canvas(bm)
+        val pt = Paint()
+        for (a in anns) drawAnn(c, a, 0f, 0f, bm.width.toFloat(), bm.height.toFloat(), pt)
+        return bm
+    }
+
+    private fun exportPng(p: Int) {
+        val r = renderer ?: return
+        val anns = ArrayList(pages[p].anns)
+        val (dlg, _) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                val bm = pageImage(r, p, anns)
+                val f = File(cacheDir, "pending.png")
+                f.outputStream().use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bm.recycle()
+                runOnUiThread {
+                    dlg.dismiss()
+                    pendingFile = f
+                    pendingMime = "image/png"
+                    val i = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                    i.addCategory(Intent.CATEGORY_OPENABLE)
+                    i.type = "image/png"
+                    i.putExtra(Intent.EXTRA_TITLE, baseName() + "_s" + (p + 1) + ".png")
+                    startActivityForResult(i, REQ_PNG)
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Şəkil yaradıla bilmədi")
+                }
+            }
+        }
+    }
+
+    private fun shareImages() {
+        val r = renderer ?: return
+        val snap = snapshot()
+        val (dlg, tv) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                val dir = ShareProvider.dir(this)
+                val uris = ArrayList<Uri>()
+                val safe = baseName().replace(Regex("[^\\p{L}\\p{N}_-]"), "_")
+                for (p in snap.indices) {
+                    runOnUiThread { tv.text = "Hazırlanır… ${p + 1}/${snap.size}" }
+                    val bm = pageImage(r, p, snap[p])
+                    val f = File(dir, safe + "_s" + (p + 1) + ".jpg")
+                    f.outputStream().use { bm.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                    bm.recycle()
+                    uris.add(ShareProvider.uriFor(f))
+                }
+                runOnUiThread {
+                    dlg.dismiss()
+                    val i = Intent(Intent.ACTION_SEND_MULTIPLE)
+                    i.type = "image/jpeg"
+                    i.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    val cd = android.content.ClipData.newRawUri("", uris[0])
+                    for (k in 1 until uris.size) cd.addItem(android.content.ClipData.Item(uris[k]))
+                    i.clipData = cd
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    startActivity(Intent.createChooser(i, "Şəkilləri paylaş"))
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Paylaşmaq mümkün olmadı")
+                }
+            }
+        }
     }
 
     // ======================= mətn axtarışı =======================
