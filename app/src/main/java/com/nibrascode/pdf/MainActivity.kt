@@ -191,6 +191,7 @@ class MainActivity : Activity() {
             else -> null
         }
         if (u != null) {
+            afterOpen = null
             val writable = inc.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
             openUri(u, if (writable) u else null)
             inc.action = null
@@ -272,7 +273,7 @@ class MainActivity : Activity() {
     }
 
     private fun applyInsets() {
-        homeBox.setPadding(insL + dp(20), insT + dp(18), insR + dp(20), insB + dp(24))
+        homeBox.setPadding(insL + dp(20), insT + dp(16), insR + dp(20), insB + dp(16))
         chrome.setPadding(insL, insT, insR, 0)
         val dl = dockHost.layoutParams as FrameLayout.LayoutParams
         dl.bottomMargin = insB
@@ -287,61 +288,145 @@ class MainActivity : Activity() {
 
     // ======================= ana səhifə =======================
 
+    private var afterOpen: (() -> Unit)? = null
+    private var showAllRecents = false
+    private val CORAL = 0xFFE5533D.toInt()
+
+    private fun rtl(v: View) { if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) v.scaleX = -1f }
+
+    private fun chev(color: Int, size: Int): ImageView {
+        val c = tintedIcon(R.drawable.ln_chev, color, size)
+        return c
+    }
+
     private fun buildHome(): FrameLayout {
         val f = FrameLayout(this)
-        f.setBackgroundColor(Ui.BG)
+        f.setBackgroundColor(0xFFFBF8F5.toInt())
+        f.addView(HomeDecor(this), FrameLayout.LayoutParams(MP, MP))
         val sc = ScrollView(this)
         sc.isFillViewport = true
         sc.overScrollMode = View.OVER_SCROLL_NEVER
         homeBox = LinearLayout(this)
         homeBox.orientation = LinearLayout.VERTICAL
 
+        // başlıq
         val head = LinearLayout(this)
-        head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
-        val logo = FrameLayout(this)
+        val logo = ImageView(this)
+        logo.setImageResource(R.mipmap.ic_launcher)
+        logo.clipToOutline = true
+        logo.background = rounded(Color.WHITE, dpf(16f))
         logo.elevation = dpf(4f)
-        val logoImg = ImageView(this)
-        logoImg.setImageResource(R.mipmap.ic_launcher)
-        logo.addView(logoImg, FrameLayout.LayoutParams(MP, MP))
         head.addView(logo, LinearLayout.LayoutParams(dp(60), dp(60)))
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(dp(14), 0, 0, 0)
-        col.addView(label("Nibras Office", 26f, Ui.TEXT, true))
-        val tag = label(tr(R.string.oxu_yaz_imzala_paylas), 13f, Ui.GOLD)
-        tag.letterSpacing = 0.06f
-        col.addView(tag)
+        col.setPaddingRelative(dp(14), 0, 0, 0)
+        col.addView(label("Nibras Office", 27f, Ui.NAVY, true))
+        col.addView(label(tr(R.string.hm_tagline), 15f, CORAL))
         head.addView(col, LinearLayout.LayoutParams(0, WC, 1f))
-        head.addView(lineBtn(R.drawable.ln_settings, tr(R.string.ayarlar), 44) { openSettings() })
+        head.addView(iconButton(R.drawable.ln_settings, tr(R.string.ayarlar), Ui.NAVY, 46, 10) { openSettings() })
         homeBox.addView(head, LinearLayout.LayoutParams(MP, WC))
         homeBox.addView(space(26))
+        homeBox.addView(label(tr(R.string.hm_title), 21f, Ui.NAVY, true))
+        val sub = label(tr(R.string.hm_sub), 14f, Ui.DIM)
+        sub.setPadding(0, dp(4), 0, 0)
+        homeBox.addView(sub)
+        homeBox.addView(space(20))
 
+        // Open PDF
         val hero = LinearLayout(this)
-        hero.orientation = LinearLayout.HORIZONTAL
-        hero.gravity = Gravity.CENTER
-        hero.background = ripple(goldGrad(dpf(20f)), false, dpf(20f))
+        hero.gravity = Gravity.CENTER_VERTICAL
+        val hg = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(0xFFF26B55.toInt(), CORAL, 0xFFC9302C.toInt()))
+        hg.cornerRadius = dpf(20f)
+        hero.background = ripple(hg, false, dpf(20f))
         hero.elevation = dpf(8f)
-        hero.addView(tintedIcon(R.drawable.ic_open, Color.WHITE, 24))
-        val ht = label(tr(R.string.pdf_ac), 17f, Color.WHITE, true)
-        ht.setPadding(dp(10), 0, 0, 0)
+        hero.setPaddingRelative(dp(24), 0, dp(18), 0)
+        hero.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        hero.addView(tintedIcon(R.drawable.hm_folder, Color.WHITE, 32))
+        val ht = label(tr(R.string.pdf_ac), 21f, Color.WHITE, true)
+        ht.setPaddingRelative(dp(14), 0, 0, 0)
         hero.addView(ht)
-        hero.setOnClickListener { pickPdf() }
-        homeBox.addView(hero, LinearLayout.LayoutParams(MP, dp(60)))
-        homeBox.addView(space(28))
+        hero.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        hero.addView(chev(Color.WHITE, 22).also { rtl(it) })
+        hero.setOnClickListener { afterOpen = null; pickPdf() }
+        homeBox.addView(hero, LinearLayout.LayoutParams(MP, dp(74)))
+        homeBox.addView(space(20))
 
-        val sec = label(tr(R.string.son_acilanlar), 12f, Ui.DIM, true)
-        sec.letterSpacing = 0.14f
-        homeBox.addView(sec)
-        homeBox.addView(space(12))
+        // 2x2 kartlar
+        val cards = listOf(
+            arrayOf(R.drawable.hm_book, 0xFFFFD9CC.toInt(), 0xFFB5432E.toInt(), R.string.hm_read, R.string.hm_read_d) to { enterAnnot(TL_HL) },
+            arrayOf(R.drawable.hm_pencil, 0xFFD9E4FF.toInt(), 0xFF2C4C9E.toInt(), R.string.hm_edit, R.string.hm_edit_d) to { selectTab(2) },
+            arrayOf(R.drawable.hm_sign, 0xFFD3F2E2.toInt(), 0xFF1F7A4D.toInt(), R.string.hm_sign, R.string.hm_sign_d) to { signDialog() },
+            arrayOf(R.drawable.hm_grid, 0xFFE9DDFF.toInt(), 0xFF6A3FB8.toInt(), R.string.hm_tools, R.string.hm_tools_d) to { selectTab(4) }
+        )
+        for (rowI in 0..1) {
+            val row = LinearLayout(this)
+            for (k in 0..1) {
+                val (d, act) = cards[rowI * 2 + k]
+                val card = LinearLayout(this)
+                card.orientation = LinearLayout.VERTICAL
+                card.setPadding(dp(16), dp(16), dp(14), dp(16))
+                card.background = ripple(rounded(Color.WHITE, dpf(18f)), false, dpf(18f))
+                card.elevation = dpf(3f)
+                val top = LinearLayout(this)
+                top.gravity = Gravity.CENTER_VERTICAL
+                val tile = FrameLayout(this)
+                tile.background = rounded(d[1], dpf(12f))
+                tile.addView(tintedIcon(d[0], d[2], 26), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
+                top.addView(tile, LinearLayout.LayoutParams(dp(48), dp(48)))
+                top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+                top.addView(chev(Ui.DIM, 18).also { rtl(it) })
+                card.addView(top)
+                val t = label(tr(d[3]), 16f, Ui.NAVY, true)
+                t.setPadding(0, dp(12), 0, dp(4))
+                t.maxLines = 1
+                t.ellipsize = TextUtils.TruncateAt.END
+                card.addView(t)
+                val ds = label(tr(d[4]), 13f, Ui.DIM)
+                ds.maxLines = 2
+                ds.setLines(2)
+                ds.ellipsize = TextUtils.TruncateAt.END
+                card.addView(ds)
+                card.setOnClickListener { afterOpen = act; pickPdf() }
+                val lp = LinearLayout.LayoutParams(0, WC, 1f)
+                lp.setMargins(dp(5), dp(5), dp(5), dp(5))
+                row.addView(card, lp)
+            }
+            val rl = LinearLayout.LayoutParams(MP, WC)
+            rl.setMargins(-dp(5), 0, -dp(5), 0)
+            homeBox.addView(row, rl)
+        }
+        homeBox.addView(space(22))
+
+        // son sənədlər
+        val rh = LinearLayout(this)
+        rh.gravity = Gravity.CENTER_VERTICAL
+        rh.background = ripple(null, false, dpf(10f))
+        rh.addView(tintedIcon(R.drawable.hm_clock, Ui.NAVY, 24))
+        val rt = label(tr(R.string.hm_recent), 18f, Ui.NAVY, true)
+        rt.setPaddingRelative(dp(12), 0, 0, 0)
+        rh.addView(rt, LinearLayout.LayoutParams(0, WC, 1f))
+        rh.addView(chev(Ui.DIM, 20).also { rtl(it) })
+        rh.setOnClickListener { showAllRecents = !showAllRecents; refreshHome() }
+        homeBox.addView(rh, LinearLayout.LayoutParams(MP, dp(44)))
+        homeBox.addView(space(8))
         recentBox = LinearLayout(this)
         recentBox.orientation = LinearLayout.VERTICAL
         homeBox.addView(recentBox, LinearLayout.LayoutParams(MP, WC))
 
-        val note = label(tr(R.string.fayllar_yalniz_cihazinda_saxlanilir_inte), 12f, Ui.DIM)
-        note.gravity = Gravity.CENTER
-        note.setPadding(0, dp(24), 0, 0)
-        homeBox.addView(note, LinearLayout.LayoutParams(MP, WC))
+        val foot = LinearLayout(this)
+        foot.gravity = Gravity.CENTER
+        foot.setPadding(0, dp(22), 0, 0)
+        val sh = ImageView(this)
+        sh.setImageResource(R.drawable.hm_shield)
+        foot.addView(sh, LinearLayout.LayoutParams(dp(18), dp(18)))
+        val bar = View(this)
+        bar.setBackgroundColor(0x22000000)
+        val bl = LinearLayout.LayoutParams(dp(1), dp(14))
+        bl.setMargins(dp(10), 0, dp(10), 0)
+        foot.addView(bar, bl)
+        foot.addView(label(tr(R.string.hm_private), 12f, Ui.DIM))
+        homeBox.addView(foot, LinearLayout.LayoutParams(MP, WC))
 
         sc.addView(homeBox, FrameLayout.LayoutParams(MP, WC))
         f.addView(sc, FrameLayout.LayoutParams(MP, MP))
@@ -352,13 +437,25 @@ class MainActivity : Activity() {
         recentBox.removeAllViews()
         val list = store.recents()
         if (list.isEmpty()) {
-            val t = label(tr(R.string.hele_hec_bir_sened_acilmayib_nbaslamaq_u), 14f, Ui.DIM)
+            val box = LinearLayout(this)
+            box.orientation = LinearLayout.VERTICAL
+            box.gravity = Gravity.CENTER_HORIZONTAL
+            box.setPadding(dp(16), dp(20), dp(16), dp(22))
+            box.background = ripple(rounded(Color.WHITE, dpf(18f)), false, dpf(18f))
+            box.elevation = dpf(2f)
+            val il = ImageView(this)
+            il.setImageResource(R.drawable.hm_empty)
+            box.addView(il, LinearLayout.LayoutParams(dp(180), dp(110)))
+            val t = label(tr(R.string.hm_empty), 16f, Ui.NAVY, true)
             t.gravity = Gravity.CENTER
-            t.setPadding(0, dp(36), 0, dp(36))
-            recentBox.addView(t, LinearLayout.LayoutParams(MP, WC))
+            t.setPadding(0, dp(12), 0, dp(4))
+            box.addView(t)
+            box.addView(label(tr(R.string.hm_empty_sub), 13f, Ui.DIM))
+            box.setOnClickListener { afterOpen = null; pickPdf() }
+            recentBox.addView(box, LinearLayout.LayoutParams(MP, WC))
             return
         }
-        for (r in list) recentBox.addView(recentCard(r))
+        for (r in if (showAllRecents) list else list.take(4)) recentBox.addView(recentCard(r))
     }
 
     private fun recentCard(r: Recent): View {
@@ -1111,6 +1208,7 @@ class MainActivity : Activity() {
     }
 
     private fun openRecent(r: Recent) {
+        afterOpen = null
         if (!store.pdf(r.id).exists()) {
             store.remove(r.id)
             refreshHome()
@@ -1192,6 +1290,7 @@ class MainActivity : Activity() {
         pv.setDoc(ratios, pages, start)
         refreshHistoryButtons()
         setChrome(!store.fullscreen)
+        afterOpen?.let { act -> afterOpen = null; ui.post { if (inEditor) act() } }
     }
 
     // Hər səhifənin hündürlük/en nisbəti (exec thread)

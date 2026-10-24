@@ -204,4 +204,19 @@
     <string name="qiymetlendir_alt">Оставьте отзыв в Google Play</string>
     <string name="acmaq_olmadi">Не удалось открыть</string>
     <string name="duz_marker">Прямой маркер</string>
+    <string name="hm_tagline">Читать · Писать · Подписать · Делиться</string>
+    <string name="hm_title">Ваши документы в порядке</string>
+    <string name="hm_sub">Простые инструменты для PDF.\nРаботайте умнее.</string>
+    <string name="hm_read">Чтение и заметки</string>
+    <string name="hm_read_d">Выделяйте, добавляйте заметки, читайте.</string>
+    <string name="hm_edit">Редактировать PDF</string>
+    <string name="hm_edit_d">Меняйте текст, изображения и страницы.</string>
+    <string name="hm_sign">Подписать документ</string>
+    <string name="hm_sign_d">Добавьте свою подпись.</string>
+    <string name="hm_tools">Объединение и инструменты</string>
+    <string name="hm_tools_d">Объединяйте, делите, извлекайте.</string>
+    <string name="hm_recent">Недавние документы</string>
+    <string name="hm_empty">Здесь появятся недавние файлы</string>
+    <string name="hm_empty_sub">Откройте первый PDF</string>
+    <string name="hm_private">Файлы остаются на устройстве</string>
 </resources>

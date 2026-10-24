@@ -204,4 +204,19 @@
     <string name="qiymetlendir_alt">Google Play-də rəy yaz</string>
     <string name="acmaq_olmadi">Açmaq mümkün olmadı</string>
     <string name="duz_marker">Düz marker</string>
+    <string name="hm_tagline">Oxu · Yaz · İmzala · Paylaş</string>
+    <string name="hm_title">Sənədləriniz qaydasında</string>
+    <string name="hm_sub">PDF faylları üçün sadə alətlər.\nDaha ağıllı işləyin.</string>
+    <string name="hm_read">Oxu və qeyd et</string>
+    <string name="hm_read_d">Vurğula, qeyd əlavə et, rahat oxu.</string>
+    <string name="hm_edit">PDF redaktə et</string>
+    <string name="hm_edit_d">Mətn, şəkil və səhifələri dəyiş.</string>
+    <string name="hm_sign">Sənədi imzala</string>
+    <string name="hm_sign_d">Rəqəmsal imzanı əlavə et.</string>
+    <string name="hm_tools">Birləşdir və alətlər</string>
+    <string name="hm_tools_d">Birləşdir, böl, çıxar və s.</string>
+    <string name="hm_recent">Son sənədlər</string>
+    <string name="hm_empty">Son faylların burada görünəcək</string>
+    <string name="hm_empty_sub">İlk PDF-ini aç</string>
+    <string name="hm_private">Faylların cihazında qalır</string>
 </resources>

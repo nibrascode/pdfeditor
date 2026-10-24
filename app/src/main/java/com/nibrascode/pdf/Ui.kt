@@ -142,3 +142,51 @@ class InkPreview(ctx: Context) : View(ctx) {
         c.drawPath(path, p)
     }
 }
+
+// Ana səhifənin fon bəzəyi: yumşaq mərcan/navy əyrilər və nöqtə şəbəkəsi
+class HomeDecor(ctx: Context) : View(ctx) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dn = ctx.resources.displayMetrics.density
+
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        c.save()
+        if (rtl) c.scale(-1f, 1f, w / 2f, h / 2f)
+        val path = android.graphics.Path()
+        // yuxarı-sağ: açıq mərcan dalğa
+        p.color = 0x22F26B55
+        path.moveTo(w, h * 0.09f)
+        path.cubicTo(w * 0.80f, h * 0.15f, w * 0.72f, h * 0.24f, w * 0.68f, h * 0.30f)
+        path.lineTo(w, h * 0.30f); path.close()
+        c.drawPath(path, p)
+        // navy əyri zolaq
+        path.reset()
+        p.color = 0xFF24365E.toInt()
+        path.moveTo(w, h * 0.10f)
+        path.cubicTo(w * 0.92f, h * 0.13f, w * 0.86f, h * 0.18f, w * 0.84f, h * 0.225f)
+        path.cubicTo(w * 0.89f, h * 0.18f, w * 0.95f, h * 0.15f, w, h * 0.14f)
+        path.close()
+        c.drawPath(path, p)
+        // mərcan dolu künc
+        path.reset()
+        p.color = 0xFFF06B57.toInt()
+        path.moveTo(w, h * 0.135f)
+        path.cubicTo(w * 0.93f, h * 0.15f, w * 0.88f, h * 0.19f, w * 0.86f, h * 0.235f)
+        path.lineTo(w, h * 0.235f); path.close()
+        c.drawPath(path, p)
+        // aşağı-sol
+        path.reset()
+        p.color = 0x55F7A08F
+        path.moveTo(0f, h * 0.93f)
+        path.cubicTo(w * 0.08f, h * 0.93f, w * 0.14f, h * 0.97f, w * 0.16f, h)
+        path.lineTo(0f, h); path.close()
+        c.drawPath(path, p)
+        // nöqtə şəbəkəsi
+        p.color = 0x33A0A6B5
+        val g = 9f * dn
+        for (i in 0 until 5) for (j in 0 until 4) c.drawCircle(w * 0.83f + i * g, h * 0.10f + j * g, 1.3f * dn, p)
+        c.restore()
+    }
+}

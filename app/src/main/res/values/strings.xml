@@ -205,4 +205,19 @@
     <string name="acmaq_olmadi">Could not open</string>
     <string name="app_name" translatable="false">Nibras Office</string>
     <string name="duz_marker">Straight highlight</string>
+    <string name="hm_tagline">Read · Write · Sign · Share</string>
+    <string name="hm_title">Your documents, organized</string>
+    <string name="hm_sub">Simple tools for your PDF files.\nWork smarter, not harder.</string>
+    <string name="hm_read">Read &amp; Annotate</string>
+    <string name="hm_read_d">Highlight, add notes, read with ease.</string>
+    <string name="hm_edit">Edit PDF</string>
+    <string name="hm_edit_d">Modify text, images and pages.</string>
+    <string name="hm_sign">Sign Document</string>
+    <string name="hm_sign_d">Add your digital signature.</string>
+    <string name="hm_tools">Merge &amp; Tools</string>
+    <string name="hm_tools_d">Combine, split, extract and more.</string>
+    <string name="hm_recent">Recent documents</string>
+    <string name="hm_empty">Your recent files will appear here</string>
+    <string name="hm_empty_sub">Open your first PDF</string>
+    <string name="hm_private">Your files stay on your device</string>
 </resources>

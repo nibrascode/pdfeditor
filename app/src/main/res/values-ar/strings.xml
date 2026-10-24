@@ -204,4 +204,19 @@
     <string name="qiymetlendir_alt">اكتب مراجعة على Google Play</string>
     <string name="acmaq_olmadi">تعذّر الفتح</string>
     <string name="duz_marker">تمييز مستقيم</string>
+    <string name="hm_tagline">اقرأ · اكتب · وقّع · شارك</string>
+    <string name="hm_title">مستنداتك منظّمة</string>
+    <string name="hm_sub">أدوات بسيطة لملفات PDF.\nاعمل بذكاء لا بجهد.</string>
+    <string name="hm_read">قراءة وتعليق</string>
+    <string name="hm_read_d">ظلّل وأضف ملاحظات واقرأ بسهولة.</string>
+    <string name="hm_edit">تحرير PDF</string>
+    <string name="hm_edit_d">عدّل النصوص والصور والصفحات.</string>
+    <string name="hm_sign">توقيع المستند</string>
+    <string name="hm_sign_d">أضف توقيعك الرقمي.</string>
+    <string name="hm_tools">دمج وأدوات</string>
+    <string name="hm_tools_d">ادمج وقسّم واستخرج والمزيد.</string>
+    <string name="hm_recent">المستندات الأخيرة</string>
+    <string name="hm_empty">ستظهر ملفاتك الأخيرة هنا</string>
+    <string name="hm_empty_sub">افتح أول ملف PDF</string>
+    <string name="hm_private">ملفاتك تبقى على جهازك</string>
 </resources>
