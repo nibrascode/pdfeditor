@@ -281,11 +281,9 @@ class MainActivity : Activity() {
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
         val logo = FrameLayout(this)
-        logo.background = rounded(Ui.SURFACE, dpf(18f), Ui.GOLD, dp(1))
+        logo.elevation = dpf(4f)
         val logoImg = ImageView(this)
-        logoImg.setImageResource(R.drawable.ic_launcher_fg)
-        logoImg.scaleX = 1.7f
-        logoImg.scaleY = 1.7f
+        logoImg.setImageResource(R.mipmap.ic_launcher)
         logo.addView(logoImg, FrameLayout.LayoutParams(MP, MP))
         head.addView(logo, LinearLayout.LayoutParams(dp(60), dp(60)))
         val col = LinearLayout(this)
