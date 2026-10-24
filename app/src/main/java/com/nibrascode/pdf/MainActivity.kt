@@ -306,6 +306,7 @@ class MainActivity : Activity() {
         f.setBackgroundColor(0xFFFBF8F5.toInt())
         f.addView(HomeDecor(this), FrameLayout.LayoutParams(MP, MP))
         val sc = ScrollView(this)
+        sc.isVerticalScrollBarEnabled = false
         sc.isFillViewport = true
         sc.overScrollMode = View.OVER_SCROLL_NEVER
         homeBox = LinearLayout(this)
@@ -840,7 +841,7 @@ class MainActivity : Activity() {
         val items: List<Triple<Int, String, () -> Unit>> = when (i) {
             0 -> listOf(
                 Triple(R.drawable.ln_pages, tr(R.string.sehifeler)) { openGrid() },
-                Triple(R.drawable.ln_moon, if (pv.night) tr(R.string.gunduz) else tr(R.string.gece)) { toggleNight(); selectTab(0) },
+                Triple(if (pv.night) R.drawable.ln_sun else R.drawable.ln_moon, if (pv.night) tr(R.string.gunduz) else tr(R.string.gece)) { toggleNight(); selectTab(0) },
                 Triple(R.drawable.ln_goto, tr(R.string.sehifeye_kec)) { jumpDialog() },
                 Triple(R.drawable.ln_expand, tr(R.string.tam_ekran)) { selectTab(-1); setChrome(false) },
                 Triple(R.drawable.ln_save, tr(R.string.yadda_saxla)) { save() },
@@ -1275,6 +1276,13 @@ class MainActivity : Activity() {
     }
 
     private fun installDoc(id: String, name: String, fd: ParcelFileDescriptor, r: PdfRenderer, list: ArrayList<PageData>, ratios: FloatArray) {
+        if (list.isEmpty() || ratios.isEmpty()) {
+            // boş / zədəli PDF: çökmək əvəzinə xəbər ver
+            try { r.close(); fd.close() } catch (e: Exception) {}
+            afterOpen = null
+            toast(tr(R.string.bu_pdf_acila_bilmedi))
+            return
+        }
         saveAnnotationsNow()
         val oldR = renderer
         val oldFd = pfd

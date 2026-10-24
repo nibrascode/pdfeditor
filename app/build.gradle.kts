@@ -17,8 +17,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // İlk Play buraxılışı. Hər yeni Play yükləməsində versionCode-u 1 artır
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         // Telefonlar üçün kifayətdir; APK həcmini kiçildir (OCR native kitabxanaları)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -35,6 +35,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // emulyator testləri üçün
+            ndk { abiFilters += listOf("x86_64") }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -60,6 +64,8 @@ android {
         generateLocaleConfig = false
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -74,6 +80,8 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
     // PDF yazmaq, səhifə əməliyyatları və mətn axtarışı (Apache 2.0)
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // Cihazda OCR (Tesseract 5, Apache 2.0) — dil faylları ilk istifadədə yüklənir
