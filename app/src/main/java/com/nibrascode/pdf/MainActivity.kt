@@ -78,6 +78,7 @@ class MainActivity : Activity() {
     private lateinit var seek: SeekBar
     private lateinit var preview: InkPreview
     private lateinit var dock: LinearLayout
+    private lateinit var dockHost: View
 
     private val toolBtns = ArrayList<ImageView>()
     private val swatches = ArrayList<View>()
@@ -114,8 +115,8 @@ class MainActivity : Activity() {
     )
 
     // Alət nömrəsinə görə (TL_VIEW=0 ... TL_ERASE=5)
-    private val toolInk = intArrayOf(0, 0xFF1E88E5.toInt(), 0xFFFDD835.toInt(), 0xFF111827.toInt(), 0xFFE53935.toInt(), 0)
-    private val toolAmt = floatArrayOf(0f, 0.30f, 0.50f, 0.40f, 0.30f, 0f)
+    private val toolInk = intArrayOf(0, 0xFF1E88E5.toInt(), 0xFFFDD835.toInt(), 0xFF111827.toInt(), 0xFFE53935.toInt(), 0, 0xFF111827.toInt())
+    private val toolAmt = floatArrayOf(0f, 0.30f, 0.50f, 0.40f, 0.30f, 0f, 0.30f)
 
     // ======================= həyat dövrü =======================
 
@@ -232,9 +233,11 @@ class MainActivity : Activity() {
         topBar.layoutParams.height = dp(56) + insT
         topBar.requestLayout()
         val bottom = insB + dp(14)
-        val dl = dock.layoutParams as FrameLayout.LayoutParams
+        val dl = dockHost.layoutParams as FrameLayout.LayoutParams
         dl.bottomMargin = bottom
-        dock.layoutParams = dl
+        dl.leftMargin = insL + dp(8)
+        dl.rightMargin = insR + dp(8)
+        dockHost.layoutParams = dl
         val pl = panel.layoutParams as FrameLayout.LayoutParams
         pl.bottomMargin = bottom + dp(60) + dp(10)
         pl.leftMargin = insL + dp(12)
@@ -427,7 +430,8 @@ class MainActivity : Activity() {
         pv.hint = "Yüklənir…"
         pv.canFlip = { d -> page + d in 0 until pages.size }
         pv.onFlip = { d -> showPage(page + d) }
-        pv.onText = { nx, ny, a -> askText(nx, ny, a) }
+        pv.onText = { nx, ny, a -> askText(nx, ny, a, false) }
+        pv.onNote = { nx, ny, a -> askText(nx, ny, a, true) }
         pv.onSettle = { s -> onZoomSettled(s) }
         pv.onHistory = { refreshHistory() }
         host.addView(pv, FrameLayout.LayoutParams(MP, MP))
@@ -528,9 +532,9 @@ class MainActivity : Activity() {
         dock.setPadding(dp(6), dp(6), dp(6), dp(6))
         val icons = intArrayOf(
             R.drawable.ic_cursor, R.drawable.ic_pen, R.drawable.ic_marker,
-            R.drawable.ic_text, R.drawable.ic_shape, R.drawable.ic_eraser
+            R.drawable.ic_text, R.drawable.ic_shape, R.drawable.ic_eraser, R.drawable.ic_note
         )
-        val descs = arrayOf("Oxu və sürüşdür", "Qələm", "Marker", "Mətn", "Fiqur", "Pozan")
+        val descs = arrayOf("Oxu və sürüşdür", "Qələm", "Marker", "Mətn", "Fiqur", "Pozan", "Yapışqan qeyd")
         icons.forEachIndexed { i, res ->
             val b = ImageView(this)
             b.setImageResource(res)
@@ -546,7 +550,20 @@ class MainActivity : Activity() {
             lp.setMargins(dp(2), 0, dp(2), 0)
             dock.addView(b, lp)
         }
-        host.addView(dock, FrameLayout.LayoutParams(WC, dp(60), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        // Şəkil və imza əlavə etmək (alət deyil, birdəfəlik əməliyyat)
+        val sep = View(this)
+        sep.setBackgroundColor(Ui.LINE)
+        val slp = LinearLayout.LayoutParams(dp(1), dp(28))
+        slp.setMargins(dp(4), 0, dp(4), 0)
+        dock.addView(sep, slp)
+        dock.addView(iconButton(R.drawable.ic_image, "Şəkil əlavə et", Ui.TEXT, 48, 12) { pickImage() })
+        dock.addView(iconButton(R.drawable.ic_sign, "İmza", Ui.TEXT, 48, 12) { signDialog() })
+        val dockScroll = android.widget.HorizontalScrollView(this)
+        dockScroll.isHorizontalScrollBarEnabled = false
+        dockScroll.overScrollMode = View.OVER_SCROLL_NEVER
+        dockScroll.addView(dock, FrameLayout.LayoutParams(WC, dp(60)))
+        dockHost = dockScroll
+        host.addView(dockScroll, FrameLayout.LayoutParams(WC, dp(60), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
         host.addView(panel, FrameLayout.LayoutParams(MP, WC, Gravity.BOTTOM))
 
         e.addView(host, LinearLayout.LayoutParams(MP, 0, 1f))
@@ -556,7 +573,7 @@ class MainActivity : Activity() {
     private fun setTool(t: Int) {
         tool = t
         pv.tool = t
-        if (t >= TL_PEN && t <= TL_SHAPE) {
+        if ((t >= TL_PEN && t <= TL_SHAPE) || t == TL_NOTE) {
             pv.ink = toolInk[t]
             pv.amount = toolAmt[t]
         }
@@ -575,10 +592,10 @@ class MainActivity : Activity() {
 
     private fun updatePanel() {
         panel.animate().cancel()
-        val show = tool >= TL_PEN && tool <= TL_SHAPE
+        val show = (tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE
         if (show) {
             seek.progress = (toolAmt[tool] * 100f).toInt()
-            preview.tool = tool
+            preview.tool = if (tool == TL_NOTE) TL_TEXT else tool
             preview.ink = toolInk[tool]
             preview.amount = toolAmt[tool]
             preview.invalidate()
@@ -694,7 +711,7 @@ class MainActivity : Activity() {
             }
             REQ_SAVE -> savePdf(u, true)
             //REQ_MERGE -> mergePdf(u)
-            //REQ_IMAGE -> insertImage(u)
+            REQ_IMAGE -> insertImage(u)
             //REQ_EXTRACT -> writePending(u)
             //REQ_SPLIT -> splitInto(u)
             //REQ_PNG -> writePending(u)
@@ -1104,7 +1121,7 @@ class MainActivity : Activity() {
         return Pair(d, tv)
     }
 
-    private fun askText(nx: Float, ny: Float, a: Ann?) {
+    private fun askText(nx: Float, ny: Float, a: Ann?, note: Boolean) {
         val et = EditText(this)
         et.setText(a?.text ?: "")
         et.setSelection(et.text.length)
@@ -1118,9 +1135,9 @@ class MainActivity : Activity() {
         box.setPadding(dp(22), dp(8), dp(22), 0)
         box.addView(et, FrameLayout.LayoutParams(MP, WC))
         val b = AlertDialog.Builder(this, R.style.NbDialog)
-            .setTitle(if (a == null) "Mətn əlavə et" else "Mətni dəyiş")
+            .setTitle(if (note) (if (a == null) "Yapışqan qeyd" else "Qeydi dəyiş") else if (a == null) "Mətn əlavə et" else "Mətni dəyiş")
             .setView(box)
-            .setPositiveButton("OK") { _, _ -> commitText(a, et.text.toString().trim(), nx, ny) }
+            .setPositiveButton("OK") { _, _ -> commitText(a, et.text.toString().trim(), nx, ny, note) }
             .setNegativeButton("Ləğv et", null)
         if (a != null) b.setNeutralButton("Sil") { _, _ -> pv.removeAnn(a) }
         val d = b.create()
@@ -1128,14 +1145,134 @@ class MainActivity : Activity() {
         d.show()
     }
 
-    private fun commitText(a: Ann?, s: String, nx: Float, ny: Float) {
+    private fun commitText(a: Ann?, s: String, nx: Float, ny: Float, note: Boolean) {
         if (a == null) {
-            if (s.isNotEmpty()) pv.addText(s, nx, ny)
+            if (s.isNotEmpty()) {
+                if (note) pv.addNote(s, nx, ny) else pv.addText(s, nx, ny)
+            }
         } else if (s.isEmpty()) {
             pv.removeAnn(a)
         } else {
             pv.editText(a, s)
         }
+    }
+
+    // ======================= şəkil və imza =======================
+
+    private fun pickImage() {
+        if (renderer == null) return
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        i.addCategory(Intent.CATEGORY_OPENABLE)
+        i.type = "image/*"
+        startActivityForResult(i, REQ_IMAGE)
+    }
+
+    // Bitmap-i sənədin qovluğunda saxlayır və səhifəyə qoyur
+    private fun placeBitmap(bm: Bitmap, png: Boolean, wFrac: Float) {
+        val id = curId ?: return
+        val name = id + "_img_" + System.nanoTime() + if (png) ".png" else ".jpg"
+        File(store.dir, name).outputStream().use {
+            bm.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 92, it)
+        }
+        pv.addImage(name, bm.height.toFloat() / bm.width, wFrac)
+        setTool(TL_VIEW)
+        toast("Yerini dəyişmək üçün sürüşdür, küncdən böyüt")
+    }
+
+    private fun insertImage(u: Uri) {
+        val (dlg, _) = progressDialog("Şəkil hazırlanır…")
+        exec.execute {
+            try {
+                val o = BitmapFactory.Options()
+                o.inJustDecodeBounds = true
+                contentResolver.openInputStream(u)?.use { BitmapFactory.decodeStream(it, null, o) }
+                var ss = 1
+                while (max(o.outWidth, o.outHeight) / ss > 3200) ss *= 2
+                val o2 = BitmapFactory.Options()
+                o2.inSampleSize = ss
+                var bm = contentResolver.openInputStream(u)?.use { BitmapFactory.decodeStream(it, null, o2) } ?: throw IOException()
+                val m = max(bm.width, bm.height)
+                if (m > 1800) {
+                    val k = 1800f / m
+                    bm = Bitmap.createScaledBitmap(bm, (bm.width * k).toInt(), (bm.height * k).toInt(), true)
+                }
+                val png = bm.hasAlpha()
+                val b2 = bm
+                runOnUiThread {
+                    dlg.dismiss()
+                    placeBitmap(b2, png, 0.5f)
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Şəkil açıla bilmədi")
+                }
+            }
+        }
+    }
+
+    private fun signDialog() {
+        if (renderer == null) return
+        val saved = store.signature?.let { File(store.dir, it) }?.takeIf { it.exists() }
+        if (saved != null) {
+            AlertDialog.Builder(this, R.style.NbDialog)
+                .setTitle("İmza")
+                .setItems(arrayOf("Saxlanmış imzanı qoy", "Yeni imza çək")) { _, w ->
+                    if (w == 0) {
+                        val bm = BitmapFactory.decodeFile(saved.path)
+                        if (bm != null) placeBitmap(bm, true, 0.3f)
+                    } else {
+                        drawSignature()
+                    }
+                }
+                .show()
+        } else {
+            drawSignature()
+        }
+    }
+
+    private fun drawSignature() {
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(18), dp(8), dp(18), 0)
+        val pad = SignPad(this)
+        pad.background = rounded(Color.WHITE, dpf(12f))
+        pad.clipToOutline = true
+        col.addView(pad, LinearLayout.LayoutParams(MP, dp(200)))
+        val row = LinearLayout(this)
+        row.gravity = Gravity.CENTER
+        row.setPadding(0, dp(10), 0, 0)
+        for (c in intArrayOf(0xFF111827.toInt(), 0xFF1E3A8A.toInt(), 0xFF1E88E5.toInt(), 0xFFE53935.toInt())) {
+            val v = View(this)
+            v.background = oval(c, Ui.LINE, dp(1))
+            v.setOnClickListener { pad.ink = c }
+            val lp = LinearLayout.LayoutParams(dp(30), dp(30))
+            lp.setMargins(dp(6), 0, dp(6), 0)
+            row.addView(v, lp)
+        }
+        val clr = label("Təmizlə", 14f, Ui.GOLD, true)
+        clr.setPadding(dp(16), dp(6), dp(6), dp(6))
+        clr.setOnClickListener { pad.clear() }
+        row.addView(clr)
+        col.addView(row)
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle("İmzanı çək")
+            .setView(col)
+            .setPositiveButton("Qoy") { _, _ ->
+                val bm = pad.export()
+                if (bm != null) {
+                    try {
+                        val name = "signature_" + System.currentTimeMillis() + ".png"
+                        store.signature?.let { File(store.dir, it).delete() }
+                        File(store.dir, name).outputStream().use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        store.signature = name
+                    } catch (e: Exception) {
+                    }
+                    placeBitmap(bm, true, 0.3f)
+                }
+            }
+            .setNegativeButton("Ləğv et", null)
+            .show()
     }
 
     // ======================= menyu =======================

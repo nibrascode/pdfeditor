@@ -15,6 +15,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 class PageView(ctx: Context) : View(ctx) {
@@ -36,6 +37,29 @@ class PageView(ctx: Context) : View(ctx) {
     var canFlip: ((Int) -> Boolean)? = null
     var onFlip: ((Int) -> Unit)? = null
     var onText: ((Float, Float, Ann?) -> Unit)? = null
+    var onNote: ((Float, Float, Ann?) -> Unit)? = null
+
+    // Axtarış nəticələri (normallaşdırılmış) — cari nəticə daha qabarıq
+    var hits: List<RectF> = emptyList()
+        set(v) {
+            field = v
+            invalidate()
+        }
+    var curHits: List<RectF> = emptyList()
+        set(v) {
+            field = v
+            invalidate()
+        }
+    private val hitPaint = Paint().apply { color = 0x55FFD54F }
+    private val curHitPaint = Paint().apply { color = 0x88FF9800.toInt() }
+    private val selPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        color = Ui.GOLD
+    }
+    private var sel: Ann? = null
+    private var resizing = false
+    private var oldP: FloatArray? = null
     var onSettle: ((Float) -> Unit)? = null
     var onHistory: (() -> Unit)? = null
 
@@ -142,6 +166,7 @@ class PageView(ctx: Context) : View(ctx) {
         flipping = false
         cur = null
         dragging = null
+        sel = null
         alpha = 0f
         animate().alpha(1f).setDuration(180).start()
         invalidate()
@@ -202,8 +227,38 @@ class PageView(ctx: Context) : View(ctx) {
         onHistory?.invoke()
     }
 
-    fun editText(a: Ann, s: String) {
-        a.text = s
+    fun editText(a: Ann, s: String) = editAnnText(a, s)
+
+    fun addNote(s: String, nx: Float, ny: Float) {
+        val pd = data ?: return
+        val wv = widthFor(TL_NOTE, amount)
+        val a = Ann(A_NOTE, ink, wv, s)
+        a.add(nx, ny - wv * 0.8f / ratio)
+        pd.addAnn(a)
+        invalidate()
+        onHistory?.invoke()
+    }
+
+    // Şəkil / imza: səhifənin ortasına, eni wFrac olmaqla
+    fun addImage(file: String, aspect: Float, wFrac: Float = 0.4f) {
+        val pd = data ?: return
+        val w = wFrac
+        val h = w * aspect / ratio
+        val a = Ann(A_IMG, 0, 0f, file)
+        a.add(0.5f - w / 2f, 0.5f - h / 2f)
+        a.add(0.5f + w / 2f, 0.5f + h / 2f)
+        pd.addAnn(a)
+        sel = a
+        invalidate()
+        onHistory?.invoke()
+    }
+
+    fun editAnnText(a: Ann, s: String) {
+        val pd = data ?: return
+        if (a.text != s) {
+            pd.commitMove(a, a2f(a), a.text)
+            a.text = s
+        }
         invalidate()
         onHistory?.invoke()
     }
@@ -323,6 +378,19 @@ class PageView(ctx: Context) : View(ctx) {
         for (a in pd.anns) {
             drawAnn(c, a, r.left, r.top, r.width(), r.height(), paint)
         }
+        for (h in hits) c.drawRect(r.left + h.left * r.width(), r.top + h.top * r.height(), r.left + h.right * r.width(), r.top + h.bottom * r.height(), hitPaint)
+        for (h in curHits) c.drawRect(r.left + h.left * r.width(), r.top + h.top * r.height(), r.left + h.right * r.width(), r.top + h.bottom * r.height(), curHitPaint)
+        val sa = sel
+        if (sa != null && pd.anns.contains(sa) && sa.p.size >= 4) {
+            val o = outline(sa, r.left, r.top, r.width(), r.height())
+            selPaint.strokeWidth = 2f * dn
+            selPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f * dn, 5f * dn), 0f)
+            c.drawRect(o[0], o[1], o[4], o[5], selPaint)
+            selPaint.pathEffect = null
+            selPaint.style = Paint.Style.FILL
+            c.drawCircle(o[4], o[5], 9f * dn, selPaint)
+            selPaint.style = Paint.Style.STROKE
+        }
         c.restore()
     }
 
@@ -403,12 +471,27 @@ class PageView(ctx: Context) : View(ctx) {
                     TL_ERASE -> {
                         erase(pd, x, y, r)
                     }
-                    TL_TEXT -> {
-                        val t = textAt(pd, x, y, r)
+                    TL_TEXT, TL_NOTE -> {
+                        val t = textAt(pd, x, y, r, if (tool == TL_TEXT) A_TEXT else A_NOTE)
                         if (t != null) {
                             dragging = t
+                            oldP = a2f(t)
                             dragDX = nx - t.p[0]
                             dragDY = ny - t.p[1]
+                        }
+                    }
+                    TL_VIEW -> {
+                        val im = imageAt(pd, x, y, r)
+                        if (im != null) {
+                            sel = im
+                            dragging = im
+                            oldP = a2f(im)
+                            val o = outline(im, r.left, r.top, r.width(), r.height())
+                            resizing = kotlin.math.hypot(x - o[4], y - o[5]) < 26f * dn
+                            dragDX = nx - min(im.p[0], im.p[2])
+                            dragDY = ny - min(im.p[1], im.p[3])
+                        } else {
+                            sel = null
                         }
                     }
                 }
@@ -433,7 +516,7 @@ class PageView(ctx: Context) : View(ctx) {
                     TL_ERASE -> {
                         erase(pd, x, y, r)
                     }
-                    TL_TEXT -> {
+                    TL_TEXT, TL_NOTE -> {
                         val t = dragging
                         if (t != null && moved) {
                             t.p[0] = nx - dragDX
@@ -441,7 +524,25 @@ class PageView(ctx: Context) : View(ctx) {
                         }
                     }
                     TL_VIEW -> {
-                        if (scale > 1.02f) {
+                        val im = dragging
+                        if (im != null) {
+                            if (moved) {
+                                val x0 = min(im.p[0], im.p[2])
+                                val y0 = min(im.p[1], im.p[3])
+                                if (resizing) {
+                                    val o = oldP!!
+                                    val asp = abs(o[3] - o[1]) / max(1e-4f, abs(o[2] - o[0]))
+                                    val nw = max(0.04f, nx - x0)
+                                    im.p[0] = x0; im.p[1] = y0
+                                    im.p[2] = x0 + nw; im.p[3] = y0 + nw * asp
+                                } else {
+                                    val w = abs(im.p[2] - im.p[0])
+                                    val h = abs(im.p[3] - im.p[1])
+                                    im.p[0] = nx - dragDX; im.p[1] = ny - dragDY
+                                    im.p[2] = im.p[0] + w; im.p[3] = im.p[1] + h
+                                }
+                            }
+                        } else if (scale > 1.02f) {
                             tx += x - lastX
                             ty += y - lastY
                             clamp()
@@ -470,16 +571,23 @@ class PageView(ctx: Context) : View(ctx) {
                     onHistory?.invoke()
                 }
                 cur = null
-                if (tool == TL_TEXT) {
+                if (tool == TL_TEXT || tool == TL_NOTE) {
                     val t = dragging
                     if (!moved && nx in 0f..1f && ny in 0f..1f) {
-                        onText?.invoke(nx, ny, t)
+                        if (tool == TL_TEXT) onText?.invoke(nx, ny, t) else onNote?.invoke(nx, ny, t)
                     } else if (t != null && moved) {
+                        pd.commitMove(t, oldP!!)
                         onHistory?.invoke()
                     }
                 }
+                val im = dragging
+                if (tool == TL_VIEW && im != null && moved) {
+                    pd.commitMove(im, oldP!!)
+                    onHistory?.invoke()
+                }
                 dragging = null
-                if (tool == TL_VIEW) finishDrag()
+                resizing = false
+                if (tool == TL_VIEW && im == null) finishDrag()
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -509,10 +617,21 @@ class PageView(ctx: Context) : View(ctx) {
         }
     }
 
-    private fun textAt(pd: PageData, x: Float, y: Float, r: RectF): Ann? {
+    private fun textAt(pd: PageData, x: Float, y: Float, r: RectF, type: Int): Ann? {
         for (i in pd.anns.indices.reversed()) {
             val a = pd.anns[i]
-            if (a.type == A_TEXT && hit(a, x, y, r)) return a
+            if (a.type == type && hit(a, x, y, r)) return a
+        }
+        return null
+    }
+
+    private fun imageAt(pd: PageData, x: Float, y: Float, r: RectF): Ann? {
+        val tol = 14f * dn
+        for (i in pd.anns.indices.reversed()) {
+            val a = pd.anns[i]
+            if (a.type != A_IMG || a.p.size < 4) continue
+            val o = outline(a, r.left, r.top, r.width(), r.height())
+            if (x >= o[0] - tol && x <= o[4] + tol && y >= o[1] - tol && y <= o[5] + tol) return a
         }
         return null
     }
@@ -521,16 +640,13 @@ class PageView(ctx: Context) : View(ctx) {
         val tol = 14f * dn
         val pw = r.width()
         val ph = r.height()
-        if (a.type == A_TEXT) {
-            paint.reset()
-            paint.textSize = a.w * pw
-            val lines = a.text.split("\n")
-            var bw = 0f
-            for (ln in lines) bw = max(bw, paint.measureText(ln))
-            val l = r.left + a.p[0] * pw
-            val t = r.top + a.p[1] * ph
-            val bh = a.w * pw * 1.2f * lines.size
-            return x >= l - tol && x <= l + bw + tol && y >= t - tol && y <= t + bh + tol
+        if (a.type == A_TEXT || a.type == A_NOTE) {
+            val b = textBox(a, r.left, r.top, pw, ph, paint)
+            return x >= b.left - tol && x <= b.right + tol && y >= b.top - tol && y <= b.bottom + tol
+        }
+        if (a.type == A_IMG && a.p.size >= 4) {
+            val o = outline(a, r.left, r.top, pw, ph)
+            return x >= o[0] && x <= o[4] && y >= o[1] && y <= o[5]
         }
         val o = outline(a, r.left, r.top, pw, ph)
         val tw = max(tol, a.w * pw / 2f)
