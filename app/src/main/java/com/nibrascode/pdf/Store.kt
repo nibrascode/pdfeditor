@@ -102,7 +102,7 @@ class Store(ctx: Context) {
         }
 
     var lang: String
-        get() = prefs.getString("lang", "") ?: ""
+        get() = prefs.getString("lang", "en") ?: "en"
         set(v) {
             prefs.edit().putString("lang", v).commit()
         }

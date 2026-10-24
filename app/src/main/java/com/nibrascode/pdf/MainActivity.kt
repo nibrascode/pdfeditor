@@ -130,9 +130,9 @@ class MainActivity : Activity() {
 
     // ======================= həyat dövrü =======================
 
-    // Tətbiq daxilində seçilmiş dil (boş = sistem dili)
+    // Seçilmiş dil: ilk açılışda "en", boş = sistem dili
     override fun attachBaseContext(base: android.content.Context) {
-        val tag = base.getSharedPreferences("nibras_pdf", MODE_PRIVATE).getString("lang", "") ?: ""
+        val tag = base.getSharedPreferences("nibras_pdf", MODE_PRIVATE).getString("lang", "en") ?: "en"
         if (tag.isEmpty()) {
             super.attachBaseContext(base)
             return
