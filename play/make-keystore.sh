@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nibras PDF — Google Play "upload" açarı yaradır (yalnız bir dəfə işlədilir).
+# Nibras Office — Google Play "upload" açarı yaradır (yalnız bir dəfə işlədilir).
 # Termux: pkg install openjdk-17      Linux/macOS: JDK 17+ lazımdır
 set -e
 if ! command -v keytool >/dev/null 2>&1; then
@@ -15,7 +15,7 @@ PASS="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 20)"
 keytool -genkeypair -v -keystore upload.jks -storetype PKCS12 -alias "$ALIAS" \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -storepass "$PASS" -keypass "$PASS" \
-  -dname "CN=Nibras PDF, O=Nibrascode, C=AZ"
+  -dname "CN=Nibras Office, O=Nibrascode, C=AZ"
 base64 upload.jks | tr -d '\n' > upload.jks.base64.txt
 echo
 echo "Hazırdır. GitHub -> repo -> Settings -> Secrets and variables -> Actions -> New repository secret:"

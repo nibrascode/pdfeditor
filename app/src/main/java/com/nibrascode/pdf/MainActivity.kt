@@ -308,7 +308,7 @@ class MainActivity : Activity() {
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.setPadding(dp(14), 0, 0, 0)
-        col.addView(label("Nibras PDF", 26f, Ui.TEXT, true))
+        col.addView(label("Nibras Office", 26f, Ui.TEXT, true))
         val tag = label(tr(R.string.oxu_yaz_imzala_paylas), 13f, Ui.GOLD)
         tag.letterSpacing = 0.06f
         col.addView(tag)
@@ -1956,7 +1956,7 @@ class MainActivity : Activity() {
         row(g4, R.drawable.ln_info, tr(R.string.app_name), tr(R.string.versiya, BuildConfig.VERSION_NAME), null, null)
         row(g4, R.drawable.ln_mail, tr(R.string.e_poct), "nibrascode@gmail.com") {
             val i = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:nibrascode@gmail.com"))
-            i.putExtra(Intent.EXTRA_SUBJECT, "Nibras PDF " + BuildConfig.VERSION_NAME)
+            i.putExtra(Intent.EXTRA_SUBJECT, "Nibras Office " + BuildConfig.VERSION_NAME)
             openSafe(Intent.createChooser(i, tr(R.string.e_poct)))
         }
         row(g4, R.drawable.ln_web, tr(R.string.veb_sayt), "nibrascode.com") {

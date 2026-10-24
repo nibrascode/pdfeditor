@@ -203,5 +203,5 @@
     <string name="qiymetlendir">Rate the app</string>
     <string name="qiymetlendir_alt">Write a review on Google Play</string>
     <string name="acmaq_olmadi">Could not open</string>
-    <string name="app_name" translatable="false">Nibras PDF</string>
+    <string name="app_name" translatable="false">Nibras Office</string>
 </resources>

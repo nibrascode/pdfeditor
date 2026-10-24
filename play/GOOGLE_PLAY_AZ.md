@@ -1,4 +1,4 @@
-# Nibras PDF — Google Play hazırlığı
+# Nibras Office — Google Play hazırlığı
 
 Yoxlanılıb: 21.10.2026 (Play qaydaları bu tarixə görədir; Play Console-un sualları sonra dəyişə bilər).
 
@@ -32,7 +32,7 @@ Bitəndə run səhifəsində **Artifacts → NibrasPDF-release** → içində `a
 Əvvəlcə **Build APK (test)** workflow-u ilə telefonda yoxla; debug APK Play-ə yüklənmir.
 
 ### 4) Play Console-da tətbiqi yarat
-Create app → ad: `Nibras PDF`, dil, **App**, **Free**, bəyannamələri təsdiqlə.
+Create app → ad: `Nibras Office`, dil, **App**, **Free**, bəyannamələri təsdiqlə.
 Paket adı `com.nibrascode.pdf` ilk yükləmədən sonra dəyişdirilə bilmir.
 
 ### 5) "App content" bölməsi (hamısı doldurulmalıdır)
@@ -56,13 +56,13 @@ Aşağıdakı mətnləri yapışdır. Qrafiklər bu qovluqdadır:
 - Adda və təsvirdə WPS, Adobe və s. ticarət nişanlarını işlətmə.
 
 #### Azərbaycan dili
-**Ad (≤30):** Nibras PDF – Oxu və Qeyd et
+**Ad (≤30):** Nibras Office – Oxu və Qeyd et
 
 **Qısa təsvir (≤80):** PDF-ləri oxu, qələmlə yaz, markerlə rənglə. Reklamsız və oflayn.
 
 **Tam təsvir:**
 
-Nibras PDF — PDF sənədlərini telefonda rahat oxumaq və üzərinə qeyd etmək üçün sürətli, sadə və məxfi tətbiqdir.
+Nibras Office — PDF sənədlərini telefonda rahat oxumaq və üzərinə qeyd etmək üçün sürətli, sadə və məxfi tətbiqdir.
 
 NƏ EDƏ BİLƏRSƏN
 • PDF-i aç və oxu: iki barmaqla yaxınlaşdır, iki dəfə toxunaraq sürətli zoom et
@@ -84,13 +84,13 @@ QEYD
 Saxlanan PDF nüsxəsində səhifələr şəkil formatında olur (mətn seçmək mümkün deyil). Parollu PDF-lər hələlik dəstəklənmir.
 
 #### English
-**Title (≤30):** Nibras PDF – Read & Annotate
+**Title (≤30):** Nibras Office – Read & Annotate
 
 **Short description (≤80):** Read PDFs, write on them, highlight and draw. Ad-free and offline.
 
 **Full description:**
 
-Nibras PDF is a fast, simple and private app for reading PDF documents on your phone and marking them up.
+Nibras Office is a fast, simple and private app for reading PDF documents on your phone and marking them up.
 
 WHAT YOU CAN DO
 • Open and read PDFs: pinch to zoom, double-tap for quick zoom

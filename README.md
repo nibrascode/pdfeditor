@@ -1,4 +1,4 @@
-# Nibras PDF
+# Nibras Office
 
 Android üçün oflayn PDF redaktoru (Kotlin, minSdk 26).
 
