@@ -204,4 +204,5 @@
     <string name="qiymetlendir_alt">Write a review on Google Play</string>
     <string name="acmaq_olmadi">Could not open</string>
     <string name="app_name" translatable="false">Nibras Office</string>
+    <string name="duz_marker">Straight highlight</string>
 </resources>

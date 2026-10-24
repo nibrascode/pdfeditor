@@ -21,7 +21,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-// WPS üslubunda davamlı şaquli oxuyucu: səhifələr alt-alta, tənbəl render, bütöv sütunun yaxınlaşdırılması
+// Nibras Office: davamlı şaquli oxuyucu: səhifələr alt-alta, tənbəl render, bütöv sütunun yaxınlaşdırılması
 class DocView(ctx: Context) : View(ctx) {
     var tool = TL_VIEW
         set(v) {
@@ -32,6 +32,8 @@ class DocView(ctx: Context) : View(ctx) {
     var ink = 0xFF1E88E5.toInt()
     var amount = 0.4f
     var shape = 0
+    // Marker: false = sərbəst (barmaq yolu ilə), true = düz xətt
+    var hlStraight = false
     var night = false
         set(v) {
             field = v
@@ -367,7 +369,7 @@ class DocView(ctx: Context) : View(ctx) {
     // ---------- çəkmə ----------
 
     override fun onDraw(c: Canvas) {
-        c.drawColor(if (night) 0xFF1B1B1D.toInt() else 0xFFECECEC.toInt())
+        c.drawColor(if (night) 0xFF1B1B1D.toInt() else 0xFFE6E9EF.toInt())
         if (ratios.isEmpty()) {
             hintPaint.textSize = 15f * dn
             c.drawText(hint, width / 2f, height / 2f, hintPaint)
@@ -528,7 +530,7 @@ class DocView(ctx: Context) : View(ctx) {
                 val ny = (y - r.top) / r.height()
                 when (tool) {
                     TL_PEN -> start(pd, Ann(A_PEN, ink, widthFor(TL_PEN, amount)).also { it.add(nx, ny) })
-                    TL_HL -> start(pd, Ann(A_HL, ink, widthFor(TL_HL, amount)).also { it.add(nx, ny); it.add(nx, ny) })
+                    TL_HL -> start(pd, Ann(A_HL, ink, widthFor(TL_HL, amount)).also { it.add(nx, ny); if (hlStraight) it.add(nx, ny) })
                     TL_SHAPE -> start(pd, Ann(A_LINE + shape, ink, widthFor(TL_SHAPE, amount)).also { it.add(nx, ny); it.add(nx, ny) })
                     TL_ERASE -> erase(pd, x, y, r)
                     TL_TEXT, TL_NOTE -> {
@@ -564,15 +566,29 @@ class DocView(ctx: Context) : View(ctx) {
                 val ny = (y - r.top) / r.height()
                 val a = cur
                 when (tool) {
-                    TL_PEN -> {
-                        if (a != null) {
-                            for (k in 0 until e.historySize) a.add((e.getHistoricalX(k) - r.left) / r.width(), (e.getHistoricalY(k) - r.top) / r.height())
-                            a.add(nx, ny)
+                    TL_PEN, TL_HL -> if (a != null) {
+                        if (tool == TL_HL && hlStraight) {
+                            a.p[2] = nx
+                            // təxminən üfüqi olanda düz tutur
+                            a.p[3] = if (abs(y - downY) < 14f * dn) a.p[1] else ny
+                        } else {
+                            val minPx = 1.2f * dn
+                            for (k in 0 until e.historySize) {
+                                val hx = e.getHistoricalX(k); val hy = e.getHistoricalY(k)
+                                if (Geom.farEnough(lastX, lastY, hx, hy, minPx)) {
+                                    a.add((hx - r.left) / r.width(), (hy - r.top) / r.height())
+                                    lastX = hx; lastY = hy
+                                }
+                            }
+                            if (Geom.farEnough(lastX, lastY, x, y, minPx)) a.add(nx, ny)
                         }
                     }
-                    TL_HL -> if (a != null) a.p[2] = nx
                     TL_SHAPE -> if (a != null) { a.p[2] = nx; a.p[3] = ny }
-                    TL_ERASE -> erase(datas[curPage], x, y, r)
+                    TL_ERASE -> {
+                        // sürətli sürüşdürmədə aradakı nöqtələri də yoxla
+                        val steps = (hypot(x - lastX, y - lastY) / (6f * dn)).toInt().coerceIn(1, 40)
+                        for (k in 1..steps) erase(datas[curPage], lerp(lastX, x, k / steps.toFloat()), lerp(lastY, y, k / steps.toFloat()), r)
+                    }
                     TL_TEXT, TL_NOTE, TL_SELECT -> {
                         val t = dragging
                         if (t != null && moved) {
@@ -591,7 +607,7 @@ class DocView(ctx: Context) : View(ctx) {
                         }
                     }
                 }
-                lastX = x; lastY = y
+                if (!(tool == TL_PEN || (tool == TL_HL && !hlStraight))) { lastX = x; lastY = y }
                 invalidate()
             }
             MotionEvent.ACTION_UP -> {
@@ -600,9 +616,18 @@ class DocView(ctx: Context) : View(ctx) {
                 val nx = (x - r.left) / r.width()
                 val ny = (y - r.top) / r.height()
                 val a = cur
+                if (a != null && (a.type == A_PEN || (a.type == A_HL && !hlStraight)) && a.p.size >= 2) {
+                    val lx = a.p[a.p.size - 2]; val ly = a.p[a.p.size - 1]
+                    if (lx != nx || ly != ny) a.add(nx, ny)
+                }
                 if (a != null) {
                     val tiny = when {
-                        a.type == A_HL -> abs(a.p[2] - a.p[0]) < 0.004f
+                        a.type == A_HL -> {
+                            var mx = 0f
+                            var k = 2
+                            while (k + 1 < a.p.size) { mx = max(mx, max(abs(a.p[k] - a.p[0]), abs(a.p[k + 1] - a.p[1]))); k += 2 }
+                            mx < 0.004f
+                        }
                         a.type >= A_LINE -> abs(a.p[2] - a.p[0]) < 0.004f && abs(a.p[3] - a.p[1]) < 0.004f
                         else -> false
                     }
@@ -659,8 +684,8 @@ class DocView(ctx: Context) : View(ctx) {
             val a = pd.anns[i]
             if (hit(a, x, y, r)) {
                 pd.removeAnn(a)
+                if (sel === a) sel = null
                 onCommit?.invoke(curPage)
-                return
             }
         }
     }

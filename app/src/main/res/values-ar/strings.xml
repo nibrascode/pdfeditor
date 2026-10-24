@@ -203,4 +203,5 @@
     <string name="qiymetlendir">قيّم التطبيق</string>
     <string name="qiymetlendir_alt">اكتب مراجعة على Google Play</string>
     <string name="acmaq_olmadi">تعذّر الفتح</string>
+    <string name="duz_marker">تمييز مستقيم</string>
 </resources>

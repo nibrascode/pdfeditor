@@ -204,7 +204,7 @@ fun drawAnn(c: Canvas, a: Ann, l: Float, t: Float, w: Float, h: Float, pt: Paint
     }
     pt.style = Paint.Style.STROKE
     pt.strokeJoin = Paint.Join.ROUND
-    pt.strokeCap = if (a.type == A_HL) Paint.Cap.BUTT else Paint.Cap.ROUND
+    pt.strokeCap = if (a.type == A_HL && n == 2) Paint.Cap.BUTT else Paint.Cap.ROUND
     pt.strokeWidth = sw
     pt.color = if (a.type == A_HL) (a.ink and 0xFFFFFF) or 0x66000000 else a.ink
     when (a.type) {
@@ -212,18 +212,13 @@ fun drawAnn(c: Canvas, a: Ann, l: Float, t: Float, w: Float, h: Float, pt: Paint
             if (n == 1) {
                 c.drawPoint(l + a.p[0] * w, t + a.p[1] * h, pt)
             } else {
+                val sm = Geom.smooth(a.p, l, t, w, h)!!
                 val path = Path()
-                path.moveTo(l + a.p[0] * w, t + a.p[1] * h)
-                if (a.type == A_PEN && n > 2) {
-                    for (i in 1 until n - 1) {
-                        val cx = l + a.p[2 * i] * w
-                        val cy = t + a.p[2 * i + 1] * h
-                        val mx = (cx + l + a.p[2 * i + 2] * w) / 2f
-                        val my = (cy + t + a.p[2 * i + 3] * h) / 2f
-                        path.quadTo(cx, cy, mx, my)
-                    }
-                }
-                path.lineTo(l + a.p[2 * n - 2] * w, t + a.p[2 * n - 1] * h)
+                path.moveTo(sm.sx, sm.sy)
+                val q = sm.quads
+                var k = 0
+                while (k + 3 < q.size) { path.quadTo(q[k], q[k + 1], q[k + 2], q[k + 3]); k += 4 }
+                path.lineTo(sm.ex, sm.ey)
                 c.drawPath(path, pt)
             }
         }

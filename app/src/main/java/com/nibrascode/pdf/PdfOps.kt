@@ -67,12 +67,10 @@ object PdfOps {
         val y0 = cb.lowerLeftY
         val w = cb.width
         val h = cb.height
-        return when (((page.rotation % 360) + 360) % 360) {
-            90 -> Triple(Matrix(0f, 1f, 1f, 0f, x0, y0), h, w)
-            180 -> Triple(Matrix(-1f, 0f, 0f, 1f, x0 + w, y0), w, h)
-            270 -> Triple(Matrix(0f, -1f, -1f, 0f, x0 + w, y0 + h), h, w)
-            else -> Triple(Matrix(1f, 0f, 0f, -1f, x0, y0 + h), w, h)
-        }
+        val r = ((page.rotation % 360) + 360) % 360
+        val m = Geom.displayMatrix(r, x0, y0, w, h)
+        val mx = Matrix(m[0], m[1], m[2], m[3], m[4], m[5])
+        return if (r == 90 || r == 270) Triple(mx, h, w) else Triple(mx, w, h)
     }
 
     private fun rgb(c: Int): PDColor = PDColor(
@@ -234,30 +232,28 @@ object PdfOps {
         cs.setStrokingColor(rgb(a.ink))
         cs.setLineWidth(sw)
         cs.setLineJoinStyle(1)
-        cs.setLineCapStyle(if (a.type == A_HL) 0 else 1)
+        cs.setLineCapStyle(if (a.type == A_HL && a.p.size == 4) 0 else 1)
         when (a.type) {
             A_PEN, A_HL -> {
-                cs.moveTo(X(0), Y(0))
                 if (n == 1) {
+                    cs.moveTo(X(0), Y(0))
                     cs.lineTo(X(0) + 0.01f, Y(0))
                 } else {
-                    var px = X(0)
-                    var py = Y(0)
-                    if (a.type == A_PEN && n > 2) {
-                        for (i in 1 until n - 1) {
-                            val cx = X(i)
-                            val cy = Y(i)
-                            val mx = (cx + X(i + 1)) / 2f
-                            val my = (cy + Y(i + 1)) / 2f
-                            cs.curveTo(
-                                px + 2f / 3f * (cx - px), py + 2f / 3f * (cy - py),
-                                mx + 2f / 3f * (cx - mx), my + 2f / 3f * (cy - my), mx, my
-                            )
-                            px = mx
-                            py = my
-                        }
+                    val sm = Geom.smooth(a.p, 0f, 0f, W, H)!!
+                    cs.moveTo(sm.sx, sm.sy)
+                    var px = sm.sx
+                    var py = sm.sy
+                    val q = sm.quads
+                    var k = 0
+                    while (k + 3 < q.size) {
+                        val cx = q[k]; val cy = q[k + 1]; val mx = q[k + 2]; val my = q[k + 3]
+                        cs.curveTo(
+                            px + 2f / 3f * (cx - px), py + 2f / 3f * (cy - py),
+                            mx + 2f / 3f * (cx - mx), my + 2f / 3f * (cy - my), mx, my
+                        )
+                        px = mx; py = my; k += 4
                     }
-                    cs.lineTo(X(n - 1), Y(n - 1))
+                    cs.lineTo(sm.ex, sm.ey)
                 }
                 cs.stroke()
             }

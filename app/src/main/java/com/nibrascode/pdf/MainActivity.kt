@@ -428,7 +428,6 @@ class MainActivity : Activity() {
 
     // ======================= redaktor =======================
 
-    // ======================= redaktor (WPS üslubu) =======================
 
     private lateinit var chrome: LinearLayout
     private lateinit var titleSmall: TextView
@@ -449,14 +448,14 @@ class MainActivity : Activity() {
     private val tabNames by lazy { arrayOf(tr(R.string.ana_sehife), tr(R.string.elave_et), tr(R.string.redakte), tr(R.string.serhler), tr(R.string.cevir), tr(R.string.aletler)) }
 
     private fun lineBtn(res: Int, desc: String, box: Int = 40, onClick: () -> Unit): ImageView {
-        val b = iconButton(res, desc, Ui.ICON, box, 9, onClick)
-        b.background = ripple(null, false, dpf(10f))
+        val b = iconButton(res, desc, Ui.ON_BAR, box, 9, onClick)
+        b.background = ripple(null, true)
         return b
     }
 
     private fun buildEditor(): FrameLayout {
         val e = FrameLayout(this)
-        e.setBackgroundColor(0xFFECECEC.toInt())
+        e.setBackgroundColor(Ui.CANVAS)
         wide = resources.configuration.smallestScreenWidthDp >= 600 || resources.configuration.screenWidthDp >= 720
 
         pv = DocView(this)
@@ -476,7 +475,7 @@ class MainActivity : Activity() {
         chrome.setBackgroundColor(Ui.BAR)
         chrome.elevation = dpf(2f)
         topBar = chrome
-        titleSmall = label("", 11f, Ui.DIM)
+        titleSmall = label("", 11f, 0xB3F1F3F8.toInt())
         titleSmall.gravity = Gravity.CENTER
         titleSmall.maxLines = 1
         titleSmall.ellipsize = TextUtils.TruncateAt.MIDDLE
@@ -492,7 +491,7 @@ class MainActivity : Activity() {
         left.gravity = Gravity.CENTER_VERTICAL
         left.addView(lineBtn(R.drawable.ln_sidebar, tr(R.string.sehifeler)) { openGrid() })
         if (wide) left.addView(lineBtn(R.drawable.ln_menu, tr(R.string.menyu)) { showMenu() })
-        left.addView(lineBtn(R.drawable.ln_cloud, tr(R.string.yadda_saxla)) { save() })
+        left.addView(lineBtn(R.drawable.ln_save, tr(R.string.yadda_saxla)) { save() })
         btnUndo = lineBtn(R.drawable.ln_undo, tr(R.string.geri_al)) { doUndo() }
         btnRedo = lineBtn(R.drawable.ln_redo, tr(R.string.tekrar_et)) { doRedo() }
         left.addView(btnUndo)
@@ -502,13 +501,16 @@ class MainActivity : Activity() {
         tabRow = LinearLayout(this)
         tabRow.gravity = Gravity.CENTER
         tabNames.forEachIndexed { i, n ->
-            val t = label(n, 14f, Ui.ICON)
+            val t = label(n, 13f, Ui.ON_BAR)
             t.gravity = Gravity.CENTER
-            t.setPadding(dp(12), dp(8), dp(12), dp(8))
-            t.background = ripple(null, false, dpf(8f))
+            t.setPadding(dp(14), dp(6), dp(14), dp(6))
+            t.background = ripple(null, false, dpf(16f))
+            val tl = LinearLayout.LayoutParams(WC, WC)
+            tl.setMargins(dp(3), 0, dp(3), 0)
+            t.layoutParams = tl
             t.setOnClickListener { selectTab(if (curTab == i) -1 else i) }
             tabViews.add(t)
-            tabRow.addView(t, LinearLayout.LayoutParams(WC, WC))
+            tabRow.addView(t)
         }
         if (wide) {
             row.addView(tabRow, LinearLayout.LayoutParams(0, WC, 1f))
@@ -516,14 +518,14 @@ class MainActivity : Activity() {
             row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         }
 
-        pageBox = label("1", 11f, Ui.ICON, true)
+        pageBox = label("1", 12f, Ui.NAVY, true)
         pageBox.gravity = Gravity.CENTER
-        pageBox.background = rounded(0, dpf(3f), Ui.ICON, dp(1))
+        pageBox.background = rounded(Ui.ACCENT, dpf(11f))
         pageBox.setOnClickListener { jumpDialog() }
-        val pbl = LinearLayout.LayoutParams(WC, dp(20))
+        val pbl = LinearLayout.LayoutParams(WC, dp(22))
         pbl.setMargins(dp(8), 0, dp(8), 0)
-        pageBox.minWidth = dp(22)
-        pageBox.setPadding(dp(4), 0, dp(4), 0)
+        pageBox.minWidth = dp(30)
+        pageBox.setPadding(dp(8), 0, dp(8), 0)
         row.addView(pageBox, pbl)
         btnPen = lineBtn(R.drawable.ln_pen, tr(R.string.qelem_qeyd_rejimi)) { toggleAnnot() }
         row.addView(btnPen)
@@ -541,14 +543,14 @@ class MainActivity : Activity() {
             chrome.addView(hs, LinearLayout.LayoutParams(MP, dp(40)))
         }
         val hair = View(this)
-        hair.setBackgroundColor(0x14000000)
-        chrome.addView(hair, LinearLayout.LayoutParams(MP, 1))
+        hair.setBackgroundColor(Ui.ACCENT)
+        chrome.addView(hair, LinearLayout.LayoutParams(MP, dp(2)))
 
         // ---- ikinci sətir: seçilmiş tabın lenti ----
         ribbon = LinearLayout(this)
         ribbon.gravity = Gravity.CENTER
-        ribbon.background = rounded(Color.WHITE, dpf(14f), Ui.LINE, dp(1))
-        ribbon.elevation = dpf(3f)
+        ribbon.background = rounded(Color.WHITE, 0f)
+        ribbon.elevation = dpf(2f)
         val rs = android.widget.HorizontalScrollView(this)
         rs.isHorizontalScrollBarEnabled = false
         rs.isFillViewport = true
@@ -559,7 +561,7 @@ class MainActivity : Activity() {
         ribbon.addView(rs, LinearLayout.LayoutParams(MP, WC))
         ribbon.visibility = View.GONE
         val rbl = LinearLayout.LayoutParams(MP, WC)
-        rbl.setMargins(dp(8), dp(6), dp(8), 0)
+        rbl.setMargins(0, 0, 0, 0)
         chrome.addView(ribbon, rbl)
         e.addView(chrome, FrameLayout.LayoutParams(MP, WC, Gravity.TOP))
 
@@ -586,7 +588,7 @@ class MainActivity : Activity() {
         // ---- aşağıda üzən alət həbi ----
         pill = LinearLayout(this)
         pill.gravity = Gravity.CENTER_VERTICAL
-        pill.background = rounded(Color.WHITE, dpf(28f), Ui.LINE, dp(1))
+        pill.background = rounded(Ui.NAVY, dpf(16f), Ui.ACCENT, dp(1))
         pill.elevation = dpf(10f)
         pill.setPadding(dp(6), dp(4), dp(6), dp(4))
         fun pb(t: Int, res: Int, d: String) {
@@ -619,7 +621,7 @@ class MainActivity : Activity() {
     private fun buildPanel() {
         panel = LinearLayout(this)
         panel.orientation = LinearLayout.VERTICAL
-        panel.background = rounded(Color.WHITE, dpf(18f), Ui.LINE, dp(1))
+        panel.background = rounded(Color.WHITE, dpf(16f), Ui.ACCENT, dp(1))
         panel.elevation = dpf(12f)
         panel.setPadding(dp(14), dp(8), dp(14), dp(10))
         panel.visibility = View.GONE
@@ -683,17 +685,35 @@ class MainActivity : Activity() {
         pvlp.leftMargin = dp(12)
         sizeRow.addView(preview, pvlp)
         panel.addView(sizeRow, LinearLayout.LayoutParams(WC, WC))
+
+        hlRow = LinearLayout(this)
+        hlRow.gravity = Gravity.CENTER_VERTICAL
+        hlRow.setPadding(dp(4), dp(6), dp(4), 0)
+        hlRow.addView(label(tr(R.string.duz_marker), 13f, Ui.TEXT), LinearLayout.LayoutParams(0, WC, 1f))
+        val sw = android.widget.Switch(this)
+        sw.thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Ui.ACCENT, 0xFFFAFAFA.toInt()))
+        sw.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Ui.GOLD, 0x33000000))
+        sw.isChecked = pv.hlStraight
+        sw.setOnCheckedChangeListener { _, on -> pv.hlStraight = on }
+        hlRow.addView(sw)
+        panel.addView(hlRow, LinearLayout.LayoutParams(MP, WC))
     }
+
+    private lateinit var hlRow: LinearLayout
 
     // Lent düyməsi: böyük xətti ikon + kiçik yazı
     private fun ribbonItem(res: Int, name: String, onClick: () -> Unit): View {
         val v = LinearLayout(this)
         v.orientation = LinearLayout.VERTICAL
         v.gravity = Gravity.CENTER
-        v.setPadding(dp(10), dp(6), dp(10), dp(6))
-        v.background = ripple(null, false, dpf(10f))
-        v.addView(tintedIcon(res, Ui.ICON, 24))
-        val t = label(name, 11f, Ui.ICON)
+        v.setPadding(dp(6), dp(6), dp(6), dp(6))
+        v.background = ripple(null, false, dpf(12f))
+        val tile = FrameLayout(this)
+        tile.background = rounded(Ui.SURFACE2, dpf(12f))
+        val ic = tintedIcon(res, Ui.GOLD, 22)
+        tile.addView(ic, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+        v.addView(tile, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val t = label(name, 11f, Ui.TEXT)
         t.setPadding(0, dp(3), 0, 0)
         t.maxLines = 1
         v.addView(t)
@@ -707,9 +727,9 @@ class MainActivity : Activity() {
         curTab = i
         tabViews.forEachIndexed { k, t ->
             val on = k == i
-            t.setTextColor(if (on) Ui.GOLD else Ui.ICON)
+            t.setTextColor(if (on) Ui.NAVY else Ui.ON_BAR)
             t.typeface = if (on) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-            t.paintFlags = if (on) t.paintFlags or Paint.UNDERLINE_TEXT_FLAG else t.paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
+            t.background = if (on) rounded(Ui.ACCENT, dpf(16f)) else ripple(null, false, dpf(16f))
         }
         ribbonRow.removeAllViews()
         if (i < 0) {
@@ -777,7 +797,8 @@ class MainActivity : Activity() {
     private fun enterAnnot(t: Int) {
         annot = true
         if (curTab != 3) selectTab(3)
-        btnPen.background = rounded(0x14000000, dpf(10f))
+        btnPen.background = oval(Ui.ACCENT)
+        btnPen.imageTintList = ColorStateList.valueOf(Ui.NAVY)
         dockHost.visibility = View.VISIBLE
         setTool(t)
         if (!chromeOn) setChrome(true)
@@ -785,7 +806,8 @@ class MainActivity : Activity() {
 
     private fun exitAnnot() {
         annot = false
-        btnPen.background = ripple(null, false, dpf(10f))
+        btnPen.background = ripple(null, true)
+        btnPen.imageTintList = ColorStateList.valueOf(Ui.ON_BAR)
         dockHost.visibility = View.GONE
         panel.visibility = View.GONE
         selectTab(-1)
@@ -816,6 +838,7 @@ class MainActivity : Activity() {
         preview.amount = toolAmt[tool]
         preview.invalidate()
         shapeRow.visibility = if (tool == TL_SHAPE) View.VISIBLE else View.GONE
+        hlRow.visibility = if (tool == TL_HL) View.VISIBLE else View.GONE
         refreshSwatches()
         refreshShapeBtns()
         panel.alpha = 0f
@@ -838,11 +861,11 @@ class MainActivity : Activity() {
     private fun styleTools() {
         for ((t, b) in pillBtns) {
             val sel = t == tool
-            b.background = if (sel) rounded(0x17000000, dpf(14f)) else ripple(null, false, dpf(14f))
-            b.imageTintList = ColorStateList.valueOf(if (sel && (t == TL_PEN || t == TL_HL)) toolInk[t] else Ui.ICON)
+            b.background = if (sel) rounded(Ui.ACCENT, dpf(12f)) else ripple(null, false, dpf(12f))
+            b.imageTintList = ColorStateList.valueOf(if (sel) Ui.NAVY else Ui.ON_BAR)
         }
         if (::colorBtn.isInitialized) {
-            val c = if ((tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE) toolInk[tool] else Ui.ICON
+            val c = if ((tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE) toolInk[tool] else Ui.ON_BAR
             colorBtn.imageTintList = ColorStateList.valueOf(c)
         }
     }
@@ -918,7 +941,7 @@ class MainActivity : Activity() {
         shapeBtns.forEachIndexed { i, b ->
             val sel = i == shape
             b.imageTintList = ColorStateList.valueOf(if (sel) Ui.GOLD else Ui.TEXT)
-            b.background = if (sel) rounded(0x22FFFFFF, dpf(12f), Ui.GOLD, dp(1)) else ripple(null, true)
+            b.background = if (sel) rounded(Ui.SURFACE2, dpf(12f), Ui.ACCENT, dp(2)) else ripple(null, true)
         }
     }
 

@@ -16,17 +16,21 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 object Ui {
-    val BG = 0xFFF4F4F5.toInt()
-    val CANVAS = 0xFFECECEC.toInt()
+    // Nibras brendi: tünd göy (navy) + qızılı
+    val BG = 0xFFF3F4F8.toInt()
+    val CANVAS = 0xFFE6E9EF.toInt()
     val SURFACE = 0xFFFFFFFF.toInt()
-    val SURFACE2 = 0xFFF0F0F2.toInt()
-    val GOLD = 0xFFD9342B.toInt()
-    val GOLD_L = 0xFFF0564B.toInt()
-    val GOLD_D = 0xFFB8261E.toInt()
-    val TEXT = 0xFF1F1F22.toInt()
-    val DIM = 0xFF85858C.toInt()
-    val ICON = 0xFF2E2E33.toInt()
-    val BAR = 0xFFF7F7F8.toInt()
+    val SURFACE2 = 0xFFEEF1F6.toInt()
+    val GOLD = 0xFF1B2A4E.toInt()      // əsas (navy)
+    val GOLD_L = 0xFF2C4170.toInt()
+    val GOLD_D = 0xFF101A33.toInt()
+    val ACCENT = 0xFFD4A63A.toInt()    // qızılı vurğu
+    val NAVY = 0xFF14203D.toInt()
+    val TEXT = 0xFF17213A.toInt()
+    val DIM = 0xFF7D8597.toInt()
+    val ICON = 0xFF24304D.toInt()
+    val BAR = 0xFF14203D.toInt()       // redaktorun üst paneli (navy)
+    val ON_BAR = 0xFFF1F3F8.toInt()
     const val LINE = 0x1A000000
 }
 
@@ -129,9 +133,12 @@ class InkPreview(ctx: Context) : View(ctx) {
             return
         }
         p.style = Paint.Style.STROKE
-        p.strokeCap = if (tool == TL_HL) Paint.Cap.BUTT else Paint.Cap.ROUND
+        p.strokeCap = Paint.Cap.ROUND
         p.strokeWidth = widthFor(tool, amount) * 360f * dn
         p.color = if (tool == TL_HL) (ink and 0xFFFFFF) or 0x66000000 else ink
-        c.drawLine(w * 0.18f, h / 2f, w * 0.82f, h / 2f, p)
+        val path = android.graphics.Path()
+        path.moveTo(w * 0.16f, h * 0.62f)
+        path.cubicTo(w * 0.36f, h * 0.18f, w * 0.6f, h * 0.86f, w * 0.84f, h * 0.38f)
+        c.drawPath(path, p)
     }
 }
