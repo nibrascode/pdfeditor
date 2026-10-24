@@ -1,1 +1,6 @@
-# Nibras PDF: elave qayda lazim deyil (kitabxana ve reflection istifade olunmur).
+# PdfBox-Android
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class com.tom_roush.fontbox.** { *; }
+-keep class com.tom_roush.harmony.** { *; }
+-dontwarn com.gemalto.jp2.**
+-dontwarn com.tom_roush.**

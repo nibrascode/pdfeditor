@@ -70,7 +70,29 @@ class Store(ctx: Context) {
         pdf(id).delete()
         ann(id).delete()
         thumb(id).delete()
+        dir.listFiles()?.forEach { if (it.name.startsWith(id + "_")) it.delete() }
+        prefs.edit().remove("uri_$id").remove("page_$id").apply()
     }
+
+    // Orijinal faylın ünvanı (üzərinə yazmaq üçün)
+    fun setUri(id: String, uri: String?) {
+        prefs.edit().putString("uri_$id", uri).apply()
+    }
+
+    fun uri(id: String): String? = prefs.getString("uri_$id", null)
+
+    // Qaldığı səhifə
+    fun setLastPage(id: String, p: Int) {
+        prefs.edit().putInt("page_$id", p).apply()
+    }
+
+    fun lastPage(id: String): Int = prefs.getInt("page_$id", 0)
+
+    var signature: String?
+        get() = prefs.getString("sig", null)
+        set(v) {
+            prefs.edit().putString("sig", v).apply()
+        }
 
     var night: Boolean
         get() = prefs.getBoolean("night", false)

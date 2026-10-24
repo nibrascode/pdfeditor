@@ -61,3 +61,8 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_17)
     }
 }
+
+dependencies {
+    // PDF yazmaq, səhifə əməliyyatları və mətn axtarışı (Apache 2.0)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+}

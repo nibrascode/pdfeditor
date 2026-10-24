@@ -49,6 +49,11 @@ import kotlin.math.min
 
 private const val REQ_OPEN = 1
 private const val REQ_SAVE = 2
+private const val REQ_MERGE = 3
+private const val REQ_IMAGE = 4
+private const val REQ_EXTRACT = 5
+private const val REQ_SPLIT = 6
+private const val REQ_PNG = 7
 private const val MP = ViewGroup.LayoutParams.MATCH_PARENT
 private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
 private const val MAX_W = 3000
@@ -64,6 +69,7 @@ class MainActivity : Activity() {
     private lateinit var titleSub: TextView
     private lateinit var btnNight: ImageView
     private lateinit var btnUndo: ImageView
+    private lateinit var btnMore: ImageView
     private lateinit var btnRedo: ImageView
     private lateinit var pv: PageView
     private lateinit var pillLabel: TextView
@@ -116,6 +122,8 @@ class MainActivity : Activity() {
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         store = Store(this)
+        PdfOps.init(this)
+        ImgCache.dir = store.dir
         val root = FrameLayout(this)
         root.setBackgroundColor(Ui.BG)
         home = buildHome()
@@ -135,10 +143,27 @@ class MainActivity : Activity() {
         refreshHome()
         root.requestApplyInsets()
 
-        val inc = intent
-        if (inc != null && inc.action == Intent.ACTION_VIEW) {
-            val u = inc.data
-            if (u != null) openUri(u)
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(i: Intent) {
+        super.onNewIntent(i)
+        setIntent(i)
+        handleIntent(i)
+    }
+
+    // «Bununla aç» (VIEW) və «Paylaş» (SEND) ilə gələn PDF-lər
+    private fun handleIntent(inc: Intent?) {
+        if (inc == null) return
+        val u: Uri? = when (inc.action) {
+            Intent.ACTION_VIEW -> inc.data
+            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) inc.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) else inc.getParcelableExtra(Intent.EXTRA_STREAM)
+            else -> null
+        }
+        if (u != null) {
+            val writable = inc.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+            openUri(u, if (writable) u else null)
+            inc.action = null
         }
     }
 
@@ -384,14 +409,16 @@ class MainActivity : Activity() {
         tcol.addView(titleName)
         tcol.addView(titleSub)
         topBar.addView(tcol, LinearLayout.LayoutParams(0, WC, 1f))
-        btnNight = iconButton(R.drawable.ic_moon, "Gecə rejimi", Ui.TEXT, 42, 10) { toggleNight() }
-        btnUndo = iconButton(R.drawable.ic_undo, "Geri al", Ui.TEXT, 42, 10) { pv.undo() }
-        btnRedo = iconButton(R.drawable.ic_redo, "Təkrar et", Ui.TEXT, 42, 10) { pv.redo() }
-        val btnSave = iconButton(R.drawable.ic_save, "PDF kimi saxla", Ui.GOLD, 42, 10) { save() }
+        btnNight = iconButton(R.drawable.ic_search, "Axtar", Ui.TEXT, 40, 9) { openSearch() }
+        btnUndo = iconButton(R.drawable.ic_undo, "Geri al", Ui.TEXT, 40, 9) { pv.undo() }
+        btnRedo = iconButton(R.drawable.ic_redo, "Təkrar et", Ui.TEXT, 40, 9) { pv.redo() }
+        val btnSave = iconButton(R.drawable.ic_save, "Yadda saxla", Ui.GOLD, 40, 9) { save() }
+        btnMore = iconButton(R.drawable.ic_more, "Daha çox", Ui.TEXT, 40, 9) { showMenu() }
         topBar.addView(btnNight)
         topBar.addView(btnUndo)
         topBar.addView(btnRedo)
         topBar.addView(btnSave)
+        topBar.addView(btnMore)
         e.addView(topBar)
 
         // ---- səhifə sahəsi ----
@@ -602,7 +629,6 @@ class MainActivity : Activity() {
     }
 
     private fun styleNight() {
-        btnNight.imageTintList = ColorStateList.valueOf(if (pv.night) Ui.GOLD else Ui.TEXT)
     }
 
     private fun refreshHistoryButtons() {
@@ -626,23 +652,52 @@ class MainActivity : Activity() {
         startActivityForResult(i, REQ_OPEN)
     }
 
+    // Üzərinə yaz (orijinal fayla yazma icazəsi varsa), yoxsa «Fərqli saxla»
     private fun save() {
+        val id = curId ?: return
+        val u = store.uri(id)
+        if (u == null) {
+            saveAs()
+            return
+        }
+        savePdf(Uri.parse(u), false)
+    }
+
+    private fun saveAs() {
         if (renderer == null) return
         val i = Intent(Intent.ACTION_CREATE_DOCUMENT)
         i.addCategory(Intent.CATEGORY_OPENABLE)
         i.type = "application/pdf"
-        i.putExtra(Intent.EXTRA_TITLE, docName.removeSuffix(".pdf") + "_qeyd.pdf")
+        i.putExtra(Intent.EXTRA_TITLE, baseName() + "_redakte.pdf")
         startActivityForResult(i, REQ_SAVE)
     }
+
+    private fun baseName(): String = docName.replace(Regex("(?i)\\.pdf$"), "").ifEmpty { "sened" }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK) return
         val u = data?.data ?: return
-        if (requestCode == REQ_OPEN) {
-            openUri(u)
-        } else if (requestCode == REQ_SAVE) {
-            savePdf(u)
+        when (requestCode) {
+            REQ_OPEN -> {
+                var keep: Uri? = null
+                try {
+                    contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    keep = u
+                } catch (e: Exception) {
+                    try {
+                        contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (e2: Exception) {
+                    }
+                }
+                openUri(u, keep)
+            }
+            REQ_SAVE -> savePdf(u, true)
+            //REQ_MERGE -> mergePdf(u)
+            //REQ_IMAGE -> insertImage(u)
+            //REQ_EXTRACT -> writePending(u)
+            //REQ_SPLIT -> splitInto(u)
+            //REQ_PNG -> writePending(u)
         }
     }
 
@@ -656,7 +711,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun openUri(uri: Uri) {
+    private fun openUri(uri: Uri, writeUri: Uri? = null) {
         val (dlg, _) = progressDialog("Açılır…")
         val name = queryName(uri) ?: "document.pdf"
         exec.execute {
@@ -672,6 +727,7 @@ class MainActivity : Activity() {
                 } else if (!tmp.renameTo(dest)) {
                     throw IOException("rename failed")
                 }
+                store.setUri(id, writeUri?.toString())
                 loadStored(id, name, dlg)
             } catch (e: Throwable) {
                 runOnUiThread {
@@ -750,7 +806,8 @@ class MainActivity : Activity() {
         styleNight()
         setTool(TL_VIEW)
         showEditor()
-        showPage(0)
+        showPage(store.lastPage(id).coerceIn(0, list.size - 1))
+        refreshHistoryButtons()
     }
 
     private fun closeDoc() {
@@ -807,6 +864,7 @@ class MainActivity : Activity() {
         val r = renderer ?: return
         if (i < 0 || i >= pages.size) return
         page = i
+        curId?.let { store.setLastPage(it, i) }
         pillLabel.text = "${i + 1} / ${pages.size}"
         val my = ++gen
         val tw = (resources.displayMetrics.widthPixels * 1.6f).toInt().coerceIn(900, 2000)
@@ -879,59 +937,133 @@ class MainActivity : Activity() {
 
     // ======================= saxlamaq / paylaşmaq =======================
 
-    // Bütün səhifələri (qeydlərlə) yeni PDF kimi yazır
-    private fun savePdf(out: Uri) {
-        val r = renderer ?: return
-        val snap = pages.map { ArrayList(it.anns) }
+    private fun snapshot(): List<List<Ann>> = pages.map { ArrayList(it.anns) }
+
+    // Qeydləri vektor kimi orijinal PDF-ə yazır (mətn seçilə bilən qalır); alınmasa şəkil kimi yazır. exec thread-də
+    private fun exportTo(os: java.io.OutputStream, snap: List<List<Ann>>, only: Set<Int>? = null, tv: TextView? = null) {
+        val id = curId ?: throw IOException("no doc")
+        try {
+            val buf = java.io.ByteArrayOutputStream()
+            PdfOps.export(store.pdf(id), snap, buf, only)
+            buf.writeTo(os)
+        } catch (e: Throwable) {
+            rasterExport(os, snap, only, tv)
+        }
+    }
+
+    private fun rasterExport(os: java.io.OutputStream, snap: List<List<Ann>>, only: Set<Int>?, tv: TextView?) {
+        val r = renderer ?: throw IOException("no renderer")
+        val doc = PdfDocument()
+        val pt = Paint()
+        val bp = Paint()
+        bp.isFilterBitmap = true
+        var k = 0
+        for (i in 0 until min(snap.size, r.pageCount)) {
+            if (only != null && i !in only) continue
+            if (tv != null) runOnUiThread { tv.text = "Saxlanılır… " + (i + 1) + "/" + snap.size }
+            val pg = r.openPage(i)
+            val wPt = pg.width
+            val hPt = pg.height
+            val sc = min(2.5f, 3200f / max(wPt, hPt))
+            val bm = Bitmap.createBitmap((wPt * sc).toInt(), (hPt * sc).toInt(), Bitmap.Config.ARGB_8888)
+            bm.eraseColor(Color.WHITE)
+            try {
+                pg.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+            } finally {
+                pg.close()
+            }
+            val info = PdfDocument.PageInfo.Builder(wPt, hPt, ++k).create()
+            val p = doc.startPage(info)
+            p.canvas.drawBitmap(bm, null, RectF(0f, 0f, wPt.toFloat(), hPt.toFloat()), bp)
+            for (a in snap[i]) drawAnn(p.canvas, a, 0f, 0f, wPt.toFloat(), hPt.toFloat(), pt)
+            doc.finishPage(p)
+            bm.recycle()
+        }
+        doc.writeTo(os)
+        doc.close()
+    }
+
+    private fun savePdf(out: Uri, isNew: Boolean) {
+        if (renderer == null) return
+        val snap = snapshot()
         val (dlg, tv) = progressDialog("Saxlanılır…")
         exec.execute {
             try {
-                val doc = PdfDocument()
-                val pt = Paint()
-                val bp = Paint()
-                bp.isFilterBitmap = true
-                for (i in 0 until snap.size) {
-                    runOnUiThread { tv.text = "Saxlanılır… " + (i + 1) + "/" + snap.size }
-                    val pg = r.openPage(i)
-                    val wPt = pg.width
-                    val hPt = pg.height
-                    val sc = min(2.5f, 3200f / max(wPt, hPt))
-                    val bm = Bitmap.createBitmap((wPt * sc).toInt(), (hPt * sc).toInt(), Bitmap.Config.ARGB_8888)
-                    bm.eraseColor(Color.WHITE)
-                    try {
-                        pg.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                    } finally {
-                        pg.close()
-                    }
-                    val info = PdfDocument.PageInfo.Builder(wPt, hPt, i + 1).create()
-                    val p = doc.startPage(info)
-                    p.canvas.drawBitmap(bm, null, RectF(0f, 0f, wPt.toFloat(), hPt.toFloat()), bp)
-                    for (a in snap[i]) {
-                        drawAnn(p.canvas, a, 0f, 0f, wPt.toFloat(), hPt.toFloat(), pt)
-                    }
-                    doc.finishPage(p)
-                    bm.recycle()
-                }
                 val os = contentResolver.openOutputStream(out, "wt") ?: throw IOException("null stream")
-                os.use { doc.writeTo(it) }
-                doc.close()
+                os.use { exportTo(it, snap, null, tv) }
                 runOnUiThread {
                     dlg.dismiss()
-                    showSaved(out)
+                    showSaved(out, isNew)
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
                     dlg.dismiss()
-                    toast("Saxlama xətası")
+                    if (!isNew) {
+                        toast("Orijinal fayla yazmaq olmadı — yeni fayl seç")
+                        curId?.let { store.setUri(it, null) }
+                        saveAs()
+                    } else {
+                        toast("Saxlama xətası")
+                    }
                 }
             }
         }
     }
 
-    private fun showSaved(uri: Uri) {
+    // Paylaşmaq / çap üçün müvəqqəti fayl (cache/share). exec thread-də
+    private fun exportTemp(snap: List<List<Ann>>, only: Set<Int>? = null, suffix: String = ""): File {
+        val dir = ShareProvider.dir(this)
+        dir.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > 3600_000) it.delete() }
+        val f = File(dir, baseName().replace(Regex("[\\\\/:*?\"<>|]"), "_") + suffix + ".pdf")
+        f.outputStream().use { exportTo(it, snap, only) }
+        return f
+    }
+
+    private fun sharePdf() {
+        if (renderer == null) return
+        val snap = snapshot()
+        val (dlg, _) = progressDialog("Hazırlanır…")
+        exec.execute {
+            try {
+                val f = exportTemp(snap)
+                runOnUiThread {
+                    dlg.dismiss()
+                    shareUri(ShareProvider.uriFor(f))
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Paylaşmaq mümkün olmadı")
+                }
+            }
+        }
+    }
+
+    private fun printPdf() {
+        if (renderer == null) return
+        val snap = snapshot()
+        val (dlg, _) = progressDialog("Çapa hazırlanır…")
+        exec.execute {
+            try {
+                val f = exportTemp(snap, null, "_cap")
+                runOnUiThread {
+                    dlg.dismiss()
+                    val pm = getSystemService(PRINT_SERVICE) as android.print.PrintManager
+                    pm.print(docName, PdfPrintAdapter(f, baseName() + ".pdf"), null)
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    toast("Çap mümkün olmadı")
+                }
+            }
+        }
+    }
+
+    private fun showSaved(uri: Uri, isNew: Boolean) {
         AlertDialog.Builder(this, R.style.NbDialog)
             .setTitle("Saxlandı ✓")
-            .setMessage("PDF yeni faylda saxlanıldı. İstəsən indi paylaşa bilərsən.")
+            .setMessage(if (isNew) "PDF yeni faylda saxlanıldı. İstəsən indi paylaşa bilərsən." else "Dəyişikliklər orijinal fayla yazıldı.")
             .setPositiveButton("Paylaş") { _, _ -> shareUri(uri) }
             .setNegativeButton("Bağla", null)
             .show()
@@ -942,6 +1074,7 @@ class MainActivity : Activity() {
             val i = Intent(Intent.ACTION_SEND)
             i.type = "application/pdf"
             i.putExtra(Intent.EXTRA_STREAM, uri)
+            i.clipData = android.content.ClipData.newRawUri("", uri)
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivity(Intent.createChooser(i, "Paylaş"))
         } catch (e: Exception) {
@@ -1003,6 +1136,33 @@ class MainActivity : Activity() {
         } else {
             pv.editText(a, s)
         }
+    }
+
+    // ======================= menyu =======================
+
+    private fun showMenu() {
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        items.add("Yadda saxla" to { save() })
+        items.add("Fərqli saxla…" to { saveAs() })
+        items.add("Paylaş" to { sharePdf() })
+        items.add("Çap et" to { printPdf() })
+        items.add((if (pv.night) "Gündüz rejimi" else "Gecə rejimi") to { toggleNight() })
+        items.add("Səhifəyə keç…" to { jumpDialog() })
+        moreItems(items)
+        val pm = android.widget.PopupMenu(this, btnMore)
+        items.forEachIndexed { i, it -> pm.menu.add(0, i, i, it.first) }
+        pm.setOnMenuItemClickListener { mi ->
+            items[mi.itemId].second()
+            true
+        }
+        pm.show()
+    }
+
+    private fun moreItems(items: ArrayList<Pair<String, () -> Unit>>) {
+    }
+
+    private fun openSearch() {
+        toast("Axtarış tezliklə")
     }
 
     private fun jumpDialog() {
