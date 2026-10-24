@@ -16,16 +16,18 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 object Ui {
-    val BG = 0xFF0B1220.toInt()
-    val CANVAS = 0xFF0F1830.toInt()
-    val SURFACE = 0xFF16213A.toInt()
-    val SURFACE2 = 0xFF1D2B49.toInt()
-    val GOLD = 0xFFE8B84A.toInt()
-    val GOLD_L = 0xFFF7D98B.toInt()
-    val GOLD_D = 0xFFB88A25.toInt()
-    val TEXT = 0xFFF3F5FA.toInt()
-    val DIM = 0xFF93A0BA.toInt()
-    const val LINE = 0x22FFFFFF
+    val BG = 0xFFF4F4F5.toInt()
+    val CANVAS = 0xFFECECEC.toInt()
+    val SURFACE = 0xFFFFFFFF.toInt()
+    val SURFACE2 = 0xFFF0F0F2.toInt()
+    val GOLD = 0xFFD9342B.toInt()
+    val GOLD_L = 0xFFF0564B.toInt()
+    val GOLD_D = 0xFFB8261E.toInt()
+    val TEXT = 0xFF1F1F22.toInt()
+    val DIM = 0xFF85858C.toInt()
+    val ICON = 0xFF2E2E33.toInt()
+    val BAR = 0xFFF7F7F8.toInt()
+    const val LINE = 0x1A000000
 }
 
 fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -57,7 +59,7 @@ fun goldGrad(radius: Float): GradientDrawable {
 
 fun ripple(base: Drawable?, circle: Boolean, radius: Float = 0f): RippleDrawable {
     val mask: Drawable = if (circle) oval(Color.WHITE) else rounded(Color.WHITE, radius)
-    return RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), base, mask)
+    return RippleDrawable(ColorStateList.valueOf(0x1F000000), base, mask)
 }
 
 fun Context.label(s: String, sp: Float, color: Int = Ui.TEXT, bold: Boolean = false): TextView {

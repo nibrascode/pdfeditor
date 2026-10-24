@@ -63,7 +63,7 @@ class MainActivity : Activity() {
     private lateinit var home: FrameLayout
     private lateinit var homeBox: LinearLayout
     private lateinit var recentBox: LinearLayout
-    private lateinit var editor: LinearLayout
+    private lateinit var editor: FrameLayout
     private lateinit var topBar: LinearLayout
     private lateinit var titleName: TextView
     private lateinit var titleSub: TextView
@@ -71,7 +71,7 @@ class MainActivity : Activity() {
     private lateinit var btnUndo: ImageView
     private lateinit var btnMore: ImageView
     private lateinit var btnRedo: ImageView
-    private lateinit var pv: PageView
+    private lateinit var pv: DocView
     private lateinit var pillLabel: TextView
     private lateinit var panel: LinearLayout
     private lateinit var shapeRow: LinearLayout
@@ -147,9 +147,9 @@ class MainActivity : Activity() {
             ins
         }
         pv.night = store.night
-        styleNight()
         styleTools()
         refreshHome()
+        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false) else systemBars(true)
         root.requestApplyInsets()
 
         handleIntent(intent)
@@ -207,6 +207,8 @@ class MainActivity : Activity() {
     private fun onBack() {
         if (grid?.visibility == View.VISIBLE) {
             closeGrid()
+        } else if (annot) {
+            exitAnnot()
         } else if (::searchBar.isInitialized && searchBar.visibility == View.VISIBLE) {
             closeSearch()
         } else {
@@ -248,21 +250,16 @@ class MainActivity : Activity() {
 
     private fun applyInsets() {
         homeBox.setPadding(insL + dp(20), insT + dp(18), insR + dp(20), insB + dp(24))
-        topBar.setPadding(insL + dp(6), insT, insR + dp(6), 0)
-        topBar.layoutParams.height = dp(56) + insT
-        topBar.requestLayout()
-        val bottom = insB + dp(14)
+        chrome.setPadding(insL, insT, insR, 0)
         val dl = dockHost.layoutParams as FrameLayout.LayoutParams
-        dl.bottomMargin = bottom
-        dl.leftMargin = insL + dp(8)
-        dl.rightMargin = insR + dp(8)
+        dl.bottomMargin = insB
         dockHost.layoutParams = dl
         val pl = panel.layoutParams as FrameLayout.LayoutParams
-        pl.bottomMargin = bottom + dp(60) + dp(10)
-        pl.leftMargin = insL + dp(12)
-        pl.rightMargin = insR + dp(12)
+        pl.bottomMargin = insB + dp(86)
         panel.layoutParams = pl
-        pv.setPads(0, bottom + dp(60) + dp(6))
+        val sl = searchBar.layoutParams as FrameLayout.LayoutParams
+        sl.topMargin = insT + dp(8)
+        searchBar.layoutParams = sl
     }
 
     // ======================= ana səhifə =======================
@@ -303,8 +300,8 @@ class MainActivity : Activity() {
         hero.gravity = Gravity.CENTER
         hero.background = ripple(goldGrad(dpf(20f)), false, dpf(20f))
         hero.elevation = dpf(8f)
-        hero.addView(tintedIcon(R.drawable.ic_open, Ui.BG, 24))
-        val ht = label("PDF aç", 17f, Ui.BG, true)
+        hero.addView(tintedIcon(R.drawable.ic_open, Color.WHITE, 24))
+        val ht = label("PDF aç", 17f, Color.WHITE, true)
         ht.setPadding(dp(10), 0, 0, 0)
         hero.addView(ht)
         hero.setOnClickListener { pickPdf() }
@@ -409,93 +406,208 @@ class MainActivity : Activity() {
 
     // ======================= redaktor =======================
 
-    private fun buildEditor(): LinearLayout {
-        val e = LinearLayout(this)
-        e.orientation = LinearLayout.VERTICAL
-        e.setBackgroundColor(Ui.BG)
+    // ======================= redaktor (WPS üslubu) =======================
+
+    private lateinit var chrome: LinearLayout
+    private lateinit var titleSmall: TextView
+    private lateinit var pageBox: TextView
+    private lateinit var btnPen: ImageView
+    private lateinit var tabRow: LinearLayout
+    private lateinit var ribbon: LinearLayout
+    private lateinit var ribbonRow: LinearLayout
+    private lateinit var pill: LinearLayout
+    private lateinit var sideBadge: TextView
+    private val tabViews = ArrayList<TextView>()
+    private val pillBtns = HashMap<Int, ImageView>()
+    private lateinit var colorBtn: ImageView
+    private var curTab = -1
+    private var chromeOn = true
+    private var annot = false
+    private var wide = false
+    private val tabNames = arrayOf("Ana Səhifə", "Əlavə et", "Redaktə", "Şərhlər", "Çevir", "Alətlər")
+
+    private fun lineBtn(res: Int, desc: String, box: Int = 40, onClick: () -> Unit): ImageView {
+        val b = iconButton(res, desc, Ui.ICON, box, 9, onClick)
+        b.background = ripple(null, false, dpf(10f))
+        return b
+    }
+
+    private fun buildEditor(): FrameLayout {
+        val e = FrameLayout(this)
+        e.setBackgroundColor(0xFFECECEC.toInt())
+        wide = resources.configuration.smallestScreenWidthDp >= 600 || resources.configuration.screenWidthDp >= 720
+
+        pv = DocView(this)
+        pv.hint = "Yüklənir…"
+        pv.onNeed = { i, w -> renderFor(i, w) }
+        pv.onPage = { p -> onPageChanged(p) }
+        pv.onTap = { setChrome(!chromeOn) }
+        pv.onText = { p, nx, ny, a -> askText(p, nx, ny, a, false) }
+        pv.onNote = { p, nx, ny, a -> askText(p, nx, ny, a, true) }
+        pv.onCommit = { p -> onAnnCommit(p) }
+        pv.onScrollState = { s -> if (s) flashBadge() }
+        e.addView(pv, FrameLayout.LayoutParams(MP, MP))
 
         // ---- üst panel ----
-        topBar = LinearLayout(this)
-        topBar.orientation = LinearLayout.HORIZONTAL
-        topBar.gravity = Gravity.CENTER_VERTICAL
-        topBar.setBackgroundColor(Ui.BG)
-        topBar.layoutParams = LinearLayout.LayoutParams(MP, dp(56))
-        topBar.addView(iconButton(R.drawable.ic_back, "Geri") { goHome() })
-        val tcol = LinearLayout(this)
-        tcol.orientation = LinearLayout.VERTICAL
-        tcol.setPadding(dp(4), 0, dp(4), 0)
-        titleName = label("", 15f, Ui.TEXT, true)
-        titleName.maxLines = 1
-        titleName.ellipsize = TextUtils.TruncateAt.END
-        titleSub = label("", 11f, Ui.DIM)
-        tcol.addView(titleName)
-        tcol.addView(titleSub)
-        topBar.addView(tcol, LinearLayout.LayoutParams(0, WC, 1f))
-        btnNight = iconButton(R.drawable.ic_search, "Axtar", Ui.TEXT, 40, 9) { openSearch() }
-        btnUndo = iconButton(R.drawable.ic_undo, "Geri al", Ui.TEXT, 40, 9) { pv.undo() }
-        btnRedo = iconButton(R.drawable.ic_redo, "Təkrar et", Ui.TEXT, 40, 9) { pv.redo() }
-        val btnSave = iconButton(R.drawable.ic_save, "Yadda saxla", Ui.GOLD, 40, 9) { save() }
-        btnMore = iconButton(R.drawable.ic_more, "Daha çox", Ui.TEXT, 40, 9) { showMenu() }
-        topBar.addView(btnNight)
-        topBar.addView(btnUndo)
-        topBar.addView(btnRedo)
-        topBar.addView(btnSave)
-        topBar.addView(btnMore)
-        e.addView(topBar)
+        chrome = LinearLayout(this)
+        chrome.orientation = LinearLayout.VERTICAL
+        chrome.setBackgroundColor(Ui.BAR)
+        chrome.elevation = dpf(2f)
+        topBar = chrome
+        titleSmall = label("", 11f, Ui.DIM)
+        titleSmall.gravity = Gravity.CENTER
+        titleSmall.maxLines = 1
+        titleSmall.ellipsize = TextUtils.TruncateAt.MIDDLE
+        titleSmall.setPadding(dp(60), dp(4), dp(60), 0)
+        chrome.addView(titleSmall, LinearLayout.LayoutParams(MP, WC))
+        titleName = titleSmall
+        titleSub = label("", 1f)
 
-        // ---- səhifə sahəsi ----
-        val host = FrameLayout(this)
-        pv = PageView(this)
-        pv.hint = "Yüklənir…"
-        pv.canFlip = { d -> page + d in 0 until pages.size }
-        pv.onFlip = { d -> showPage(page + d) }
-        pv.onText = { nx, ny, a -> askText(nx, ny, a, false) }
-        pv.onNote = { nx, ny, a -> askText(nx, ny, a, true) }
-        pv.onSettle = { s -> onZoomSettled(s) }
-        pv.onHistory = { refreshHistory() }
-        host.addView(pv, FrameLayout.LayoutParams(MP, MP))
+        val row = LinearLayout(this)
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(4), 0, dp(4), 0)
+        val left = LinearLayout(this)
+        left.gravity = Gravity.CENTER_VERTICAL
+        left.addView(lineBtn(R.drawable.ln_sidebar, "Səhifələr") { openGrid() })
+        if (wide) left.addView(lineBtn(R.drawable.ln_menu, "Menyu") { showMenu() })
+        left.addView(lineBtn(R.drawable.ln_cloud, "Yadda saxla") { save() })
+        btnUndo = lineBtn(R.drawable.ln_undo, "Geri al") { doUndo() }
+        btnRedo = lineBtn(R.drawable.ln_redo, "Təkrar et") { doRedo() }
+        left.addView(btnUndo)
+        left.addView(btnRedo)
+        row.addView(left)
 
-        // səhifə nömrəsi
-        val pill = LinearLayout(this)
-        pill.orientation = LinearLayout.HORIZONTAL
-        pill.gravity = Gravity.CENTER_VERTICAL
-        pill.background = rounded(0xE6101A2E.toInt(), dpf(18f), Ui.LINE, dp(1))
-        pill.elevation = dpf(6f)
-        pill.addView(iconButton(R.drawable.ic_chev_l, "Əvvəlki səhifə", Ui.TEXT, 36, 8) { showPage(page - 1) })
-        pillLabel = label("1 / 1", 13f, Ui.TEXT, true)
-        pillLabel.gravity = Gravity.CENTER
-        pillLabel.minWidth = dp(54)
-        pillLabel.setOnClickListener { jumpDialog() }
-        pillLabel.setOnLongClickListener {
-            openGrid()
-            true
+        tabRow = LinearLayout(this)
+        tabRow.gravity = Gravity.CENTER
+        tabNames.forEachIndexed { i, n ->
+            val t = label(n, 14f, Ui.ICON)
+            t.gravity = Gravity.CENTER
+            t.setPadding(dp(12), dp(8), dp(12), dp(8))
+            t.background = ripple(null, false, dpf(8f))
+            t.setOnClickListener { selectTab(if (curTab == i) -1 else i) }
+            tabViews.add(t)
+            tabRow.addView(t, LinearLayout.LayoutParams(WC, WC))
         }
-        pill.addView(pillLabel, LinearLayout.LayoutParams(WC, MP))
-        pill.addView(iconButton(R.drawable.ic_chev_r, "Növbəti səhifə", Ui.TEXT, 36, 8) { showPage(page + 1) })
-        val plp = FrameLayout.LayoutParams(WC, dp(36), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
-        plp.topMargin = dp(10)
-        host.addView(pill, plp)
+        if (wide) {
+            row.addView(tabRow, LinearLayout.LayoutParams(0, WC, 1f))
+        } else {
+            row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        }
 
+        pageBox = label("1", 11f, Ui.ICON, true)
+        pageBox.gravity = Gravity.CENTER
+        pageBox.background = rounded(0, dpf(3f), Ui.ICON, dp(1))
+        pageBox.setOnClickListener { jumpDialog() }
+        val pbl = LinearLayout.LayoutParams(WC, dp(20))
+        pbl.setMargins(dp(8), 0, dp(8), 0)
+        pageBox.minWidth = dp(22)
+        pageBox.setPadding(dp(4), 0, dp(4), 0)
+        row.addView(pageBox, pbl)
+        btnPen = lineBtn(R.drawable.ln_pen, "Qələm — qeyd rejimi") { toggleAnnot() }
+        row.addView(btnPen)
+        btnNight = lineBtn(R.drawable.ln_search, "Axtar") { openSearch() }
+        row.addView(btnNight)
+        if (wide) row.addView(lineBtn(R.drawable.ln_share, "Paylaş") { sharePdf() })
+        btnMore = lineBtn(if (wide) R.drawable.ln_close else R.drawable.ln_menu, if (wide) "Bağla" else "Menyu") { if (wide) goHome() else showMenu() }
+        row.addView(btnMore)
+        chrome.addView(row, LinearLayout.LayoutParams(MP, dp(48)))
+        if (!wide) {
+            val hs = android.widget.HorizontalScrollView(this)
+            hs.isHorizontalScrollBarEnabled = false
+            hs.overScrollMode = View.OVER_SCROLL_NEVER
+            hs.addView(tabRow, FrameLayout.LayoutParams(WC, dp(40)))
+            chrome.addView(hs, LinearLayout.LayoutParams(MP, dp(40)))
+        }
+        val hair = View(this)
+        hair.setBackgroundColor(0x14000000)
+        chrome.addView(hair, LinearLayout.LayoutParams(MP, 1))
+
+        // ---- ikinci sətir: seçilmiş tabın lenti ----
+        ribbon = LinearLayout(this)
+        ribbon.gravity = Gravity.CENTER
+        ribbon.background = rounded(Color.WHITE, dpf(14f), Ui.LINE, dp(1))
+        ribbon.elevation = dpf(3f)
+        val rs = android.widget.HorizontalScrollView(this)
+        rs.isHorizontalScrollBarEnabled = false
+        rs.isFillViewport = true
+        ribbonRow = LinearLayout(this)
+        ribbonRow.gravity = Gravity.CENTER
+        ribbonRow.setPadding(dp(6), dp(4), dp(6), dp(4))
+        rs.addView(ribbonRow, FrameLayout.LayoutParams(WC, WC))
+        ribbon.addView(rs, LinearLayout.LayoutParams(MP, WC))
+        ribbon.visibility = View.GONE
+        val rbl = LinearLayout.LayoutParams(MP, WC)
+        rbl.setMargins(dp(8), dp(6), dp(8), 0)
+        chrome.addView(ribbon, rbl)
+        e.addView(chrome, FrameLayout.LayoutParams(MP, WC, Gravity.TOP))
+
+        // ---- axtarış ----
         searchBar = buildSearchBar()
         val sbl = FrameLayout.LayoutParams(MP, dp(48), Gravity.TOP)
         sbl.setMargins(dp(10), dp(8), dp(10), 0)
-        host.addView(searchBar, sbl)
+        e.addView(searchBar, sbl)
 
-        // ---- seçimlər paneli ----
+        // ---- sürüşdürərkən yan nişan ----
+        sideBadge = label("", 12f, Color.WHITE, true)
+        sideBadge.background = rounded(0xCC2E2E33.toInt(), dpf(12f))
+        sideBadge.setPadding(dp(10), dp(4), dp(10), dp(4))
+        sideBadge.alpha = 0f
+        val bl = FrameLayout.LayoutParams(WC, WC, Gravity.END or Gravity.CENTER_VERTICAL)
+        bl.rightMargin = dp(10)
+        e.addView(sideBadge, bl)
+        pillLabel = sideBadge
+
+        // ---- rəng / qalınlıq popoveri ----
+        buildPanel()
+        e.addView(panel, FrameLayout.LayoutParams(WC, WC, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+
+        // ---- aşağıda üzən alət həbi ----
+        pill = LinearLayout(this)
+        pill.gravity = Gravity.CENTER_VERTICAL
+        pill.background = rounded(Color.WHITE, dpf(28f), Ui.LINE, dp(1))
+        pill.elevation = dpf(10f)
+        pill.setPadding(dp(6), dp(4), dp(6), dp(4))
+        fun pb(t: Int, res: Int, d: String) {
+            val b = lineBtn(res, d, 48) { pillTool(t) }
+            pillBtns[t] = b
+            pill.addView(b)
+        }
+        pb(TL_PEN, R.drawable.ln_pen, "Qələm")
+        pb(TL_HL, R.drawable.ln_marker, "Marker")
+        pb(TL_ERASE, R.drawable.ln_eraser, "Pozan")
+        pb(TL_SELECT, R.drawable.ln_lasso, "Seç və köçür")
+        colorBtn = lineBtn(R.drawable.ln_palette, "Rəng və qalınlıq", 48) { togglePanel() }
+        pill.addView(colorBtn)
+        pb(TL_SHAPE, R.drawable.ln_shape, "Fiqur")
+        pb(TL_VIEW, R.drawable.ln_hand, "Əl — sürüşdür")
+        pill.addView(lineBtn(R.drawable.ln_expand, "Tam ekran", 48) { setChrome(!chromeOn) })
+        val phs = android.widget.HorizontalScrollView(this)
+        phs.isHorizontalScrollBarEnabled = false
+        phs.clipToPadding = false
+        phs.setPadding(dp(10), dp(12), dp(10), dp(12))
+        phs.clipChildren = false
+        phs.addView(pill, FrameLayout.LayoutParams(WC, dp(58)))
+        dockHost = phs
+        phs.visibility = View.GONE
+        e.addView(phs, FrameLayout.LayoutParams(WC, WC, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        dock = pill
+        return e
+    }
+
+    private fun buildPanel() {
         panel = LinearLayout(this)
         panel.orientation = LinearLayout.VERTICAL
-        panel.background = rounded(0xF01D2B49.toInt(), dpf(22f), Ui.LINE, dp(1))
-        panel.elevation = dpf(10f)
-        panel.setPadding(dp(14), dp(8), dp(14), dp(12))
+        panel.background = rounded(Color.WHITE, dpf(18f), Ui.LINE, dp(1))
+        panel.elevation = dpf(12f)
+        panel.setPadding(dp(14), dp(8), dp(14), dp(10))
         panel.visibility = View.GONE
 
         shapeRow = LinearLayout(this)
-        shapeRow.orientation = LinearLayout.HORIZONTAL
         shapeRow.gravity = Gravity.CENTER
         val shapeIcons = intArrayOf(R.drawable.ic_s_line, R.drawable.ic_s_arrow, R.drawable.ic_s_rect, R.drawable.ic_s_oval)
         val shapeDescs = arrayOf("Xətt", "Ox", "Düzbucaqlı", "Elips")
         shapeIcons.forEachIndexed { i, res ->
-            val b = iconButton(res, shapeDescs[i], Ui.TEXT, 44, 10) {
+            val b = iconButton(res, shapeDescs[i], Ui.ICON, 44, 10) {
                 shape = i
                 pv.shape = i
                 refreshShapeBtns()
@@ -508,7 +620,6 @@ class MainActivity : Activity() {
         panel.addView(shapeRow, LinearLayout.LayoutParams(MP, WC))
 
         val swRow = LinearLayout(this)
-        swRow.orientation = LinearLayout.HORIZONTAL
         swRow.gravity = Gravity.CENTER
         for (c in palette) {
             val v = View(this)
@@ -518,22 +629,22 @@ class MainActivity : Activity() {
                 preview.ink = c
                 preview.invalidate()
                 refreshSwatches()
+                styleTools()
             }
             swatches.add(v)
-            val lp = LinearLayout.LayoutParams(dp(30), dp(30))
+            val lp = LinearLayout.LayoutParams(dp(32), dp(32))
             lp.setMargins(dp(5), dp(8), dp(5), dp(8))
             swRow.addView(v, lp)
         }
         panel.addView(swRow, LinearLayout.LayoutParams(MP, WC))
 
         val sizeRow = LinearLayout(this)
-        sizeRow.orientation = LinearLayout.HORIZONTAL
         sizeRow.gravity = Gravity.CENTER_VERTICAL
         seek = SeekBar(this)
         seek.max = 100
         seek.progressTintList = ColorStateList.valueOf(Ui.GOLD)
         seek.thumbTintList = ColorStateList.valueOf(Ui.GOLD)
-        seek.progressBackgroundTintList = ColorStateList.valueOf(0x44FFFFFF)
+        seek.progressBackgroundTintList = ColorStateList.valueOf(0x33000000)
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
                 if (fromUser) setAmount(p / 100f)
@@ -543,59 +654,151 @@ class MainActivity : Activity() {
 
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
-        sizeRow.addView(seek, LinearLayout.LayoutParams(0, dp(40), 1f))
+        sizeRow.addView(seek, LinearLayout.LayoutParams(dp(220), dp(40)))
         preview = InkPreview(this)
-        preview.background = rounded(0xFFFFFFFF.toInt(), dpf(10f))
+        preview.background = rounded(0xFFF4F4F5.toInt(), dpf(10f))
         val pvlp = LinearLayout.LayoutParams(dp(64), dp(38))
         pvlp.leftMargin = dp(12)
         sizeRow.addView(preview, pvlp)
-        panel.addView(sizeRow, LinearLayout.LayoutParams(MP, WC))
+        panel.addView(sizeRow, LinearLayout.LayoutParams(WC, WC))
+    }
 
-        // ---- alətlər (yuxarıdakı panelin altında üzən dok) ----
-        dock = LinearLayout(this)
-        dock.orientation = LinearLayout.HORIZONTAL
-        dock.gravity = Gravity.CENTER
-        dock.background = rounded(0xF2101A2E.toInt(), dpf(32f), Ui.LINE, dp(1))
-        dock.elevation = dpf(12f)
-        dock.setPadding(dp(6), dp(6), dp(6), dp(6))
-        val icons = intArrayOf(
-            R.drawable.ic_cursor, R.drawable.ic_pen, R.drawable.ic_marker,
-            R.drawable.ic_text, R.drawable.ic_shape, R.drawable.ic_eraser, R.drawable.ic_note
-        )
-        val descs = arrayOf("Oxu və sürüşdür", "Qələm", "Marker", "Mətn", "Fiqur", "Pozan", "Yapışqan qeyd")
-        icons.forEachIndexed { i, res ->
-            val b = ImageView(this)
-            b.setImageResource(res)
-            b.scaleType = ImageView.ScaleType.FIT_CENTER
-            b.contentDescription = descs[i]
-            b.setPadding(dp(12), dp(12), dp(12), dp(12))
-            b.setOnClickListener {
-                setTool(i)
-                b.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            }
-            toolBtns.add(b)
-            val lp = LinearLayout.LayoutParams(dp(48), dp(48))
-            lp.setMargins(dp(2), 0, dp(2), 0)
-            dock.addView(b, lp)
+    // Lent düyməsi: böyük xətti ikon + kiçik yazı
+    private fun ribbonItem(res: Int, name: String, onClick: () -> Unit): View {
+        val v = LinearLayout(this)
+        v.orientation = LinearLayout.VERTICAL
+        v.gravity = Gravity.CENTER
+        v.setPadding(dp(10), dp(6), dp(10), dp(6))
+        v.background = ripple(null, false, dpf(10f))
+        v.addView(tintedIcon(res, Ui.ICON, 24))
+        val t = label(name, 11f, Ui.ICON)
+        t.setPadding(0, dp(3), 0, 0)
+        t.maxLines = 1
+        v.addView(t)
+        v.setOnClickListener { onClick() }
+        v.layoutParams = LinearLayout.LayoutParams(WC, WC)
+        v.minimumWidth = dp(64)
+        return v
+    }
+
+    private fun selectTab(i: Int) {
+        curTab = i
+        tabViews.forEachIndexed { k, t ->
+            val on = k == i
+            t.setTextColor(if (on) Ui.GOLD else Ui.ICON)
+            t.typeface = if (on) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+            t.paintFlags = if (on) t.paintFlags or Paint.UNDERLINE_TEXT_FLAG else t.paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
         }
-        // Şəkil və imza əlavə etmək (alət deyil, birdəfəlik əməliyyat)
-        val sep = View(this)
-        sep.setBackgroundColor(Ui.LINE)
-        val slp = LinearLayout.LayoutParams(dp(1), dp(28))
-        slp.setMargins(dp(4), 0, dp(4), 0)
-        dock.addView(sep, slp)
-        dock.addView(iconButton(R.drawable.ic_image, "Şəkil əlavə et", Ui.TEXT, 48, 12) { pickImage() })
-        dock.addView(iconButton(R.drawable.ic_sign, "İmza", Ui.TEXT, 48, 12) { signDialog() })
-        val dockScroll = android.widget.HorizontalScrollView(this)
-        dockScroll.isHorizontalScrollBarEnabled = false
-        dockScroll.overScrollMode = View.OVER_SCROLL_NEVER
-        dockScroll.addView(dock, FrameLayout.LayoutParams(WC, dp(60)))
-        dockHost = dockScroll
-        host.addView(dockScroll, FrameLayout.LayoutParams(WC, dp(60), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        host.addView(panel, FrameLayout.LayoutParams(MP, WC, Gravity.BOTTOM))
+        ribbonRow.removeAllViews()
+        if (i < 0) {
+            ribbon.visibility = View.GONE
+            return
+        }
+        val items: List<Triple<Int, String, () -> Unit>> = when (i) {
+            0 -> listOf(
+                Triple(R.drawable.ln_pages, "Səhifələr") { openGrid() },
+                Triple(R.drawable.ln_moon, if (pv.night) "Gündüz" else "Gecə") { toggleNight(); selectTab(0) },
+                Triple(R.drawable.ln_goto, "Səhifəyə keç") { jumpDialog() },
+                Triple(R.drawable.ln_expand, "Tam ekran") { selectTab(-1); setChrome(false) },
+                Triple(R.drawable.ln_save, "Yadda saxla") { save() },
+                Triple(R.drawable.ln_saveas, "Fərqli saxla") { saveAs() }
+            )
+            1 -> listOf(
+                Triple(R.drawable.ln_text, "Mətn") { enterAnnot(TL_TEXT) },
+                Triple(R.drawable.ln_image, "Şəkil") { pickImage() },
+                Triple(R.drawable.ln_sign, "İmza") { signDialog() },
+                Triple(R.drawable.ln_note, "Qeyd") { enterAnnot(TL_NOTE) },
+                Triple(R.drawable.ln_shape, "Fiqur") { enterAnnot(TL_SHAPE) },
+                Triple(R.drawable.ln_add, "Boş səhifə") { insertBlank(page) }
+            )
+            2 -> listOf(
+                Triple(R.drawable.ln_pages, "Səhifələr") { openGrid() },
+                Triple(R.drawable.ln_rotate, "Sağa döndər") { rotatePage(page, 90) },
+                Triple(R.drawable.ln_rotl, "Sola döndər") { rotatePage(page, -90) },
+                Triple(R.drawable.ln_copy, "Dublikat") { duplicatePage(page) },
+                Triple(R.drawable.ln_trash, "Səhifəni sil") { if (pages.size > 1) confirmDeletePage(page) },
+                Triple(R.drawable.ln_extract, "Çıxar") { extractDialog() }
+            )
+            3 -> listOf(
+                Triple(R.drawable.ln_text, "Mətn") { enterAnnot(TL_TEXT) },
+                Triple(R.drawable.ln_marker, "Marker") { enterAnnot(TL_HL) },
+                Triple(R.drawable.ln_image, "Şəkil") { pickImage() },
+                Triple(R.drawable.ln_add, "Boş səhifə") { insertBlank(page) },
+                Triple(R.drawable.ln_sign, "İmza") { signDialog() },
+                Triple(R.drawable.ln_note, "Qeyd") { enterAnnot(TL_NOTE) },
+                Triple(R.drawable.ln_lasso, "Seç") { enterAnnot(TL_SELECT) },
+                Triple(R.drawable.ln_trash, "Seçiləni sil") { if (!pv.deleteSelected()) toast("Əvvəlcə «Seç» ilə qeydə toxun") }
+            )
+            4 -> listOf(
+                Triple(R.drawable.ln_png, "Səhifə → PNG") { exportPng(page) },
+                Triple(R.drawable.ln_image, "Hamısı → JPEG") { shareImages() },
+                Triple(R.drawable.ln_merge, "Birləşdir") { pickMerge() },
+                Triple(R.drawable.ln_split, "Böl") { splitDialog() },
+                Triple(R.drawable.ln_extract, "Səhifə çıxar") { extractDialog() }
+            )
+            else -> listOf(
+                Triple(R.drawable.ln_search, "Axtar") { openSearch() },
+                Triple(R.drawable.ln_ocr, "OCR (skan)") { ocrAll() },
+                Triple(R.drawable.ln_lock, "Şifrə") { passwordMenu() },
+                Triple(R.drawable.ln_print, "Çap et") { printPdf() },
+                Triple(R.drawable.ln_share, "Paylaş") { sharePdf() }
+            )
+        }
+        for ((res, n, f) in items) ribbonRow.addView(ribbonItem(res, n, f))
+        ribbon.visibility = View.VISIBLE
+    }
 
-        e.addView(host, LinearLayout.LayoutParams(MP, 0, 1f))
-        return e
+    private fun toggleAnnot() {
+        if (annot) exitAnnot() else enterAnnot(TL_PEN)
+    }
+
+    private fun enterAnnot(t: Int) {
+        annot = true
+        if (curTab != 3) selectTab(3)
+        btnPen.background = rounded(0x14000000, dpf(10f))
+        dockHost.visibility = View.VISIBLE
+        setTool(t)
+        if (!chromeOn) setChrome(true)
+    }
+
+    private fun exitAnnot() {
+        annot = false
+        btnPen.background = ripple(null, false, dpf(10f))
+        dockHost.visibility = View.GONE
+        panel.visibility = View.GONE
+        selectTab(-1)
+        setTool(TL_VIEW)
+    }
+
+    private fun pillTool(t: Int) {
+        if (t == tool && t != TL_VIEW && t != TL_ERASE && t != TL_SELECT) {
+            togglePanel()
+            return
+        }
+        setTool(t)
+    }
+
+    private fun togglePanel() {
+        if (panel.visibility == View.VISIBLE) {
+            panel.visibility = View.GONE
+            return
+        }
+        if (!((tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE)) setTool(TL_PEN)
+        showPanel()
+    }
+
+    private fun showPanel() {
+        seek.progress = (toolAmt[tool] * 100f).toInt()
+        preview.tool = if (tool == TL_NOTE) TL_TEXT else tool
+        preview.ink = toolInk[tool]
+        preview.amount = toolAmt[tool]
+        preview.invalidate()
+        shapeRow.visibility = if (tool == TL_SHAPE) View.VISIBLE else View.GONE
+        refreshSwatches()
+        refreshShapeBtns()
+        panel.alpha = 0f
+        panel.visibility = View.VISIBLE
+        panel.animate().alpha(1f).setDuration(140).start()
     }
 
     private fun setTool(t: Int) {
@@ -611,35 +814,73 @@ class MainActivity : Activity() {
     }
 
     private fun styleTools() {
-        toolBtns.forEachIndexed { i, b ->
-            val sel = i == tool
-            b.imageTintList = ColorStateList.valueOf(if (sel) Ui.BG else Ui.TEXT)
-            b.background = if (sel) oval(Ui.GOLD) else ripple(null, true)
+        for ((t, b) in pillBtns) {
+            val sel = t == tool
+            b.background = if (sel) rounded(0x17000000, dpf(14f)) else ripple(null, false, dpf(14f))
+            b.imageTintList = ColorStateList.valueOf(if (sel && (t == TL_PEN || t == TL_HL)) toolInk[t] else Ui.ICON)
+        }
+        if (::colorBtn.isInitialized) {
+            val c = if ((tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE) toolInk[tool] else Ui.ICON
+            colorBtn.imageTintList = ColorStateList.valueOf(c)
         }
     }
 
     private fun updatePanel() {
-        panel.animate().cancel()
         val show = (tool >= TL_PEN && tool <= TL_SHAPE) || tool == TL_NOTE
-        if (show) {
-            seek.progress = (toolAmt[tool] * 100f).toInt()
-            preview.tool = if (tool == TL_NOTE) TL_TEXT else tool
-            preview.ink = toolInk[tool]
-            preview.amount = toolAmt[tool]
-            preview.invalidate()
-            shapeRow.visibility = if (tool == TL_SHAPE) View.VISIBLE else View.GONE
-            refreshSwatches()
-            refreshShapeBtns()
-            if (panel.visibility != View.VISIBLE) {
-                panel.alpha = 0f
-                panel.visibility = View.VISIBLE
-                panel.animate().alpha(1f).setDuration(160).start()
-            } else {
-                panel.alpha = 1f
-            }
-        } else if (panel.visibility == View.VISIBLE) {
-            panel.animate().alpha(0f).setDuration(120).withEndAction { panel.visibility = View.GONE }.start()
+        if (!show) panel.visibility = View.GONE else if (panel.visibility == View.VISIBLE) showPanel()
+    }
+
+    // Tam ekran: sistem panelləri və alətlər gizlənir, toxunanda görünür
+    private fun setChrome(on: Boolean) {
+        chromeOn = on
+        chrome.animate().cancel()
+        if (on) {
+            chrome.visibility = View.VISIBLE
+            chrome.animate().translationY(0f).alpha(1f).setDuration(180).start()
+        } else {
+            chrome.animate().translationY(-chrome.height.toFloat()).alpha(0f).setDuration(180)
+                .withEndAction { if (!chromeOn) chrome.visibility = View.INVISIBLE }.start()
+            if (!annot) panel.visibility = View.GONE
         }
+        systemBars(on)
+    }
+
+    private fun systemBars(show: Boolean) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val c = window.insetsController ?: return
+            if (show) {
+                c.show(WindowInsets.Type.systemBars())
+            } else {
+                c.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                c.hide(WindowInsets.Type.systemBars())
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (show) {
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            } else {
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            }
+        }
+    }
+
+    private val hideBadge = Runnable { sideBadge.animate().alpha(0f).setDuration(250).start() }
+
+    private fun flashBadge() {
+        if (pages.isEmpty()) return
+        sideBadge.text = "${page + 1} / ${pages.size}"
+        sideBadge.animate().cancel()
+        sideBadge.alpha = 1f
+        ui.removeCallbacks(hideBadge)
+        ui.postDelayed(hideBadge, 900)
+    }
+
+    private fun onPageChanged(p: Int) {
+        page = p
+        pageBox.text = (p + 1).toString()
+        curId?.let { store.setLastPage(it, p) }
+        flashBadge()
     }
 
     private fun refreshSwatches() {
@@ -676,9 +917,50 @@ class MainActivity : Activity() {
     private fun styleNight() {
     }
 
+    // Ümumi tarixçə: annotasiya (səhifə nömrəsi) və ya səhifə əməliyyatı (snapshot)
+    private class HPage(val pdf: File, val json: String, val page: Int)
+
+    private val hist = ArrayList<Any>()
+    private val redoHist = ArrayList<Any>()
+
+    private fun clearHistory() {
+        for (h in hist + redoHist) if (h is HPage) h.pdf.delete()
+        hist.clear()
+        redoHist.clear()
+    }
+
+    private fun onAnnCommit(p: Int) {
+        hist.add(p)
+        for (h in redoHist) if (h is HPage) h.pdf.delete()
+        redoHist.clear()
+        refreshHistory()
+    }
+
+    private fun doUndo() {
+        val h = hist.removeLastOrNull() ?: return
+        if (h is Int) {
+            if (pages.getOrNull(h)?.doUndo() == true) redoHist.add(h)
+            pv.invalidate()
+            refreshHistory()
+        } else if (h is HPage) {
+            restoreSnapshot(h, redoHist)
+        }
+    }
+
+    private fun doRedo() {
+        val h = redoHist.removeLastOrNull() ?: return
+        if (h is Int) {
+            if (pages.getOrNull(h)?.doRedo() == true) hist.add(h)
+            pv.invalidate()
+            refreshHistory()
+        } else if (h is HPage) {
+            restoreSnapshot(h, hist)
+        }
+    }
+
     private fun refreshHistoryButtons() {
-        btnUndo.alpha = if (pv.canUndo()) 1f else 0.3f
-        btnRedo.alpha = if (pv.canRedo()) 1f else 0.3f
+        btnUndo.alpha = if (hist.isNotEmpty()) 1f else 0.3f
+        btnRedo.alpha = if (redoHist.isNotEmpty()) 1f else 0.3f
     }
 
     // Hər dəyişiklikdən sonra qeydlər avtomatik saxlanılır
@@ -805,6 +1087,7 @@ class MainActivity : Activity() {
                 throw e
             }
             val n = r.pageCount
+            val ratios = pageRatios(r)
             val list = ArrayList<PageData>()
             repeat(n) { list.add(PageData()) }
             try {
@@ -814,7 +1097,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 dlg.dismiss()
-                installDoc(id, name, fd, r, list)
+                installDoc(id, name, fd, r, list, ratios)
             }
         } catch (e: Throwable) {
             val fresh = store.recents().none { it.id == id }
@@ -826,7 +1109,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun installDoc(id: String, name: String, fd: ParcelFileDescriptor, r: PdfRenderer, list: ArrayList<PageData>) {
+    private fun installDoc(id: String, name: String, fd: ParcelFileDescriptor, r: PdfRenderer, list: ArrayList<PageData>, ratios: FloatArray) {
         saveAnnotationsNow()
         val oldR = renderer
         val oldFd = pfd
@@ -847,13 +1130,27 @@ class MainActivity : Activity() {
         store.touch(id, name, list.size)
         titleName.text = name
         titleSub.text = "${list.size} səhifə"
-        pv.clear()
-        pv.hint = "Yüklənir…"
-        styleNight()
+        clearHistory()
+        if (annot) exitAnnot()
         setTool(TL_VIEW)
         showEditor()
-        showPage(store.lastPage(id).coerceIn(0, list.size - 1))
+        val start = store.lastPage(id).coerceIn(0, list.size - 1)
+        page = start
+        pageBox.text = (start + 1).toString()
+        pv.setDoc(ratios, pages, start)
         refreshHistoryButtons()
+        setChrome(false)
+    }
+
+    // Hər səhifənin hündürlük/en nisbəti (exec thread)
+    private fun pageRatios(r: PdfRenderer): FloatArray {
+        val out = FloatArray(r.pageCount)
+        for (i in 0 until r.pageCount) {
+            val pg = r.openPage(i)
+            out[i] = pg.height.toFloat() / max(1, pg.width)
+            pg.close()
+        }
+        return out
     }
 
     private fun resetDocState() {
@@ -893,6 +1190,10 @@ class MainActivity : Activity() {
         ui.removeCallbacks(saveRunnable)
         saveAnnotationsNow()
         closeGrid()
+        if (annot) exitAnnot()
+        selectTab(-1)
+        setChrome(true)
+        clearHistory()
         closeDoc()
         pv.clear()
         inEditor = false
@@ -916,30 +1217,43 @@ class MainActivity : Activity() {
     // ======================= səhifələrin çəkilişi =======================
 
     private fun showPage(i: Int) {
-        val r = renderer ?: return
         if (i < 0 || i >= pages.size) return
-        page = i
-        curId?.let { store.setLastPage(it, i) }
-        pillLabel.text = "${i + 1} / ${pages.size}"
-        val my = ++gen
-        val tw = (resources.displayMetrics.widthPixels * 1.6f).toInt().coerceIn(900, 2000)
+        pv.scrollToPage(i)
+    }
+
+    // DocView-un istədiyi səhifəni lazım olan endə çəkir
+    private fun renderFor(i: Int, w: Int) {
+        val r = renderer ?: return
+        val ver = docVer
         val id = curId
         exec.execute {
-            if (my != gen) return@execute
+            if (ver != docVer || r !== renderer) return@execute
+            var ok = false
+            runOnUiThreadSync { ok = pv.wants(i) }
+            if (!ok) {
+                runOnUiThread { pv.failed(i) }
+                return@execute
+            }
             try {
-                val res = renderPage(r, i, tw)
+                val res = renderPage(r, i, w)
                 if (i == 0 && id != null) makeThumb(id, res.first)
-                runOnUiThread {
-                    if (my == gen && r === renderer) {
-                        pv.setPage(res.first, pages[i], res.second)
-                        applyPageHits()
-                        refreshHistoryButtons()
-                    }
-                }
+                runOnUiThread { if (ver == docVer && r === renderer) pv.setBitmap(i, res.first) else pv.failed(i) }
             } catch (e: Throwable) {
-                runOnUiThread { pv.cancelFlip() }
+                runOnUiThread { pv.failed(i) }
             }
         }
+    }
+
+    private fun runOnUiThreadSync(f: () -> Unit) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        ui.post {
+            try {
+                f()
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(500, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun renderPage(r: PdfRenderer, i: Int, tw: Int): Pair<Bitmap, Float> {
@@ -966,28 +1280,6 @@ class MainActivity : Activity() {
             f.outputStream().use { t.compress(Bitmap.CompressFormat.JPEG, 82, it) }
             t.recycle()
         } catch (e: Exception) {
-        }
-    }
-
-    // Yaxınlaşdırdıqdan sonra səhifəni daha yüksək keyfiyyətdə yenidən çəkir (mətn kəskin görünsün)
-    private fun onZoomSettled(scale: Float) {
-        val r = renderer ?: return
-        val need = (resources.displayMetrics.widthPixels * scale * 1.2f).toInt()
-        val have = pv.bitmapWidth()
-        if (scale < 1.4f || have <= 0 || have >= need || have >= MAX_W) return
-        val tw = min(MAX_W, need)
-        val my = gen
-        val hg = ++hiGen
-        val i = page
-        exec.execute {
-            if (my != gen || hg != hiGen) return@execute
-            try {
-                val res = renderPage(r, i, tw)
-                runOnUiThread {
-                    if (my == gen && r === renderer) pv.replaceBitmap(res.first, res.second)
-                }
-            } catch (e: Throwable) {
-            }
         }
     }
 
@@ -1160,7 +1452,7 @@ class MainActivity : Activity() {
         return Pair(d, tv)
     }
 
-    private fun askText(nx: Float, ny: Float, a: Ann?, note: Boolean) {
+    private fun askText(pg: Int, nx: Float, ny: Float, a: Ann?, note: Boolean) {
         val et = EditText(this)
         et.setText(a?.text ?: "")
         et.setSelection(et.text.length)
@@ -1176,23 +1468,21 @@ class MainActivity : Activity() {
         val b = AlertDialog.Builder(this, R.style.NbDialog)
             .setTitle(if (note) (if (a == null) "Yapışqan qeyd" else "Qeydi dəyiş") else if (a == null) "Mətn əlavə et" else "Mətni dəyiş")
             .setView(box)
-            .setPositiveButton("OK") { _, _ -> commitText(a, et.text.toString().trim(), nx, ny, note) }
+            .setPositiveButton("OK") { _, _ -> commitText(pg, a, et.text.toString().trim(), nx, ny, note) }
             .setNegativeButton("Ləğv et", null)
-        if (a != null) b.setNeutralButton("Sil") { _, _ -> pv.removeAnn(a) }
+        if (a != null) b.setNeutralButton("Sil") { _, _ -> pv.removeAnn(pg, a) }
         val d = b.create()
         d.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         d.show()
     }
 
-    private fun commitText(a: Ann?, s: String, nx: Float, ny: Float, note: Boolean) {
+    private fun commitText(pg: Int, a: Ann?, s: String, nx: Float, ny: Float, note: Boolean) {
         if (a == null) {
-            if (s.isNotEmpty()) {
-                if (note) pv.addNote(s, nx, ny) else pv.addText(s, nx, ny)
-            }
+            if (s.isNotEmpty()) pv.addText(pg, s, nx, ny, note)
         } else if (s.isEmpty()) {
-            pv.removeAnn(a)
+            pv.removeAnn(pg, a)
         } else {
-            pv.editText(a, s)
+            pv.editAnnText(pg, a, s)
         }
     }
 
@@ -1213,8 +1503,8 @@ class MainActivity : Activity() {
         File(store.dir, name).outputStream().use {
             bm.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 92, it)
         }
-        pv.addImage(name, bm.height.toFloat() / bm.width, wFrac)
-        setTool(TL_VIEW)
+        pv.addImage(page, name, bm.height.toFloat() / bm.width, wFrac)
+        enterAnnot(TL_SELECT)
         toast("Yerini dəyişmək üçün sürüşdür, küncdən böyüt")
     }
 
@@ -1312,6 +1602,14 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("Ləğv et", null)
             .show()
+    }
+
+    private fun ocrAll() {
+        toast("OCR hazırlanır")
+    }
+
+    private fun passwordMenu() {
+        toast("Şifrə")
     }
 
     // ======================= menyu =======================
@@ -1572,16 +1870,32 @@ class MainActivity : Activity() {
         }
     }
 
-    // Yeni səhifə sırasını PdfBox ilə yazır, sənədi yenidən açır
+    // Yeni səhifə sırasını PdfBox ilə yazır, sənədi yenidən açır (geri alına bilər)
     private fun applyPages(specs: List<PageSpec>, np: List<PageData>, extra: List<File>, goTo: Int) {
         val id = curId ?: return
+        replaceWorking({ tmp -> PdfOps.rebuild(listOf(store.pdf(id)) + extra, specs, tmp); for (f in extra) f.delete() }, np, null, goTo, hist, true)
+    }
+
+    private fun restoreSnapshot(h: HPage, pushTo: ArrayList<Any>) {
+        replaceWorking({ tmp -> h.pdf.copyTo(tmp, true) }, null, h.json, h.page, pushTo, false) { h.pdf.delete() }
+    }
+
+    // İşçi nüsxəni əvəz edir: əvvəlcə cari vəziyyətin snapshot-ı pushTo-ya yazılır
+    private fun replaceWorking(
+        produce: (File) -> Unit, np: List<PageData>?, json: String?, goTo: Int,
+        pushTo: ArrayList<Any>, clearRedo: Boolean, done: (() -> Unit)? = null
+    ) {
+        val id = curId ?: return
         saveAnnotationsNow()
+        val curJson = annsToJson(pages)
+        val curPage = page
         val (dlg, _) = progressDialog("Səhifələr yenilənir…")
         exec.execute {
             val tmp = File(store.dir, "tmp_ops_" + System.nanoTime() + ".pdf")
+            val snap = File(store.dir, id + "_hist_" + System.nanoTime() + ".pdf")
             try {
-                PdfOps.rebuild(listOf(store.pdf(id)) + extra, specs, tmp)
-                // köhnə rendereri bağla, faylı əvəz et, yenidən aç
+                store.pdf(id).copyTo(snap, true)
+                produce(tmp)
                 try {
                     renderer?.close()
                     pfd?.close()
@@ -1595,29 +1909,45 @@ class MainActivity : Activity() {
                 }
                 val fd = ParcelFileDescriptor.open(dest, ParcelFileDescriptor.MODE_READ_ONLY)
                 val r = PdfRenderer(fd)
-                for (f in extra) f.delete()
+                val ratios = pageRatios(r)
+                val list: List<PageData> = np ?: ArrayList<PageData>().also { l ->
+                    repeat(r.pageCount) { l.add(PageData()) }
+                    if (json != null) try { jsonToAnns(json, l) } catch (e: Exception) {}
+                }
                 runOnUiThread {
                     dlg.dismiss()
                     renderer = r
                     pfd = fd
                     pages.clear()
-                    for (pd in np) pages.add(pd)
+                    for (pd in list) pages.add(pd)
+                    for (pd in pages) { pd.undo.clear(); pd.redo.clear() }
+                    // annotasiya addımları səhifə nömrələrinə bağlıdır — səhifə əməliyyatından sonra yalnız snapshot-lar qalır
+                    hist.removeAll { it is Int }
+                    redoHist.removeAll { it is Int }
+                    if (clearRedo) {
+                        for (h in redoHist) if (h is HPage) h.pdf.delete()
+                        redoHist.clear()
+                    }
+                    pushTo.add(HPage(snap, curJson, curPage))
+                    done?.invoke()
                     resetDocState()
                     thumbs = arrayOfNulls(pages.size)
                     thumbBusy.clear()
                     store.thumb(id).delete()
                     store.touch(id, docName, pages.size)
-                    titleSub.text = "${pages.size} səhifə"
                     saveAnnotationsNow()
                     (gridView?.adapter as? android.widget.BaseAdapter)?.notifyDataSetChanged()
-                    showPage(goTo.coerceIn(0, pages.size - 1))
+                    val g = goTo.coerceIn(0, pages.size - 1)
+                    page = g
+                    pv.setDoc(ratios, pages, g)
+                    refreshHistoryButtons()
                 }
             } catch (e: Throwable) {
                 tmp.delete()
+                snap.delete()
                 runOnUiThread {
                     dlg.dismiss()
                     toast("Əməliyyat alınmadı")
-                    // renderer bağlanıbsa, sənədi yenidən aç
                     if (curId != null) {
                         val (d2, _) = progressDialog("Açılır…")
                         exec.execute { loadStored(id, docName, d2) }
@@ -1894,8 +2224,7 @@ class MainActivity : Activity() {
         hits = emptyList()
         hitIdx = -1
         searchCount.text = ""
-        pv.hits = emptyList()
-        pv.curHits = emptyList()
+        pv.setHits(emptyMap(), -1, emptyList())
         val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         imm.hideSoftInputFromWindow(searchEt.windowToken, 0)
     }
@@ -1934,8 +2263,7 @@ class MainActivity : Activity() {
         if (h.isEmpty()) {
             hitIdx = -1
             searchCount.text = "0"
-            pv.hits = emptyList()
-            pv.curHits = emptyList()
+            pv.setHits(emptyMap(), -1, emptyList())
             val noText = texts?.all { it.text.isBlank() } == true
             toast(if (noText) "Bu PDF-də mətn qatı yoxdur (skan edilmiş ola bilər)" else "Tapılmadı")
             return
@@ -1956,25 +2284,26 @@ class MainActivity : Activity() {
     private fun gotoHit() {
         val h = hits.getOrNull(hitIdx) ?: return
         searchCount.text = "${hitIdx + 1}/${hits.size}"
-        if (h.page != page) showPage(h.page) else applyPageHits()
+        applyPageHits()
+        if (h.page != page) showPage(h.page)
     }
 
     private fun applyPageHits() {
         if (hits.isEmpty()) {
-            pv.hits = emptyList()
-            pv.curHits = emptyList()
+            pv.setHits(emptyMap(), -1, emptyList())
             return
         }
         val cur = hits.getOrNull(hitIdx)
-        pv.hits = hits.filter { it.page == page && it !== cur }.flatMap { it.rects }
-        pv.curHits = if (cur != null && cur.page == page) cur.rects else emptyList()
+        val all = HashMap<Int, ArrayList<RectF>>()
+        for (h in hits) if (h !== cur) all.getOrPut(h.page) { ArrayList() }.addAll(h.rects)
+        pv.setHits(all, cur?.page ?: -1, cur?.rects ?: emptyList())
     }
 
     private fun buildSearchBar(): LinearLayout {
         val bar = LinearLayout(this)
         bar.orientation = LinearLayout.HORIZONTAL
         bar.gravity = Gravity.CENTER_VERTICAL
-        bar.background = rounded(0xF2101A2E.toInt(), dpf(22f), Ui.GOLD, dp(1))
+        bar.background = rounded(Color.WHITE, dpf(22f), Ui.LINE, dp(1))
         bar.elevation = dpf(10f)
         bar.setPadding(dp(12), 0, dp(4), 0)
         bar.addView(tintedIcon(R.drawable.ic_search, Ui.GOLD, 20))

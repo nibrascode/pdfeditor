@@ -1,7 +1,7 @@
 <resources>
-    <color name="nb_bg">#0B1220</color>
-    <color name="nb_surface">#16213A</color>
-    <color name="nb_gold">#E8B84A</color>
-    <color name="nb_text">#F3F5FA</color>
-    <color name="nb_dim">#93A0BA</color>
+    <color name="nb_bg">#F4F4F5</color>
+    <color name="nb_surface">#FFFFFF</color>
+    <color name="nb_gold">#D9342B</color>
+    <color name="nb_text">#1F1F22</color>
+    <color name="nb_dim">#85858C</color>
 </resources>

@@ -24,6 +24,7 @@ const val TL_TEXT = 3
 const val TL_SHAPE = 4
 const val TL_ERASE = 5
 const val TL_NOTE = 6
+const val TL_SELECT = 7
 
 // Annotasiya növləri
 const val A_PEN = 0
