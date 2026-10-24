@@ -79,6 +79,14 @@ class MainActivity : Activity() {
     private lateinit var preview: InkPreview
     private lateinit var dock: LinearLayout
     private lateinit var dockHost: View
+    private lateinit var searchBar: LinearLayout
+    private lateinit var searchEt: EditText
+    private lateinit var searchCount: TextView
+    private var hits: List<Hit> = emptyList()
+    private var hitIdx = -1
+    private var texts: List<PdfOps.PageText>? = null
+    private var textsFor: String? = null
+    private var docVer = 0
 
     private val toolBtns = ArrayList<ImageView>()
     private val swatches = ArrayList<View>()
@@ -453,6 +461,11 @@ class MainActivity : Activity() {
         plp.topMargin = dp(10)
         host.addView(pill, plp)
 
+        searchBar = buildSearchBar()
+        val sbl = FrameLayout.LayoutParams(MP, dp(48), Gravity.TOP)
+        sbl.setMargins(dp(10), dp(8), dp(10), 0)
+        host.addView(searchBar, sbl)
+
         // ---- seçimlər paneli ----
         panel = LinearLayout(this)
         panel.orientation = LinearLayout.VERTICAL
@@ -808,6 +821,7 @@ class MainActivity : Activity() {
         docName = name
         pages.clear()
         pages.addAll(list)
+        resetDocState()
         exec.execute {
             try {
                 oldR?.close()
@@ -827,6 +841,13 @@ class MainActivity : Activity() {
         refreshHistoryButtons()
     }
 
+    private fun resetDocState() {
+        docVer++
+        texts = null
+        textsFor = null
+        if (::searchBar.isInitialized) closeSearch()
+    }
+
     private fun closeDoc() {
         val r = renderer
         val f = pfd
@@ -834,6 +855,7 @@ class MainActivity : Activity() {
         pfd = null
         curId = null
         pages.clear()
+        resetDocState()
         exec.execute {
             try {
                 r?.close()
@@ -894,6 +916,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (my == gen && r === renderer) {
                         pv.setPage(res.first, pages[i], res.second)
+                        applyPageHits()
                         refreshHistoryButtons()
                     }
                 }
@@ -1298,8 +1321,139 @@ class MainActivity : Activity() {
     private fun moreItems(items: ArrayList<Pair<String, () -> Unit>>) {
     }
 
+    // ======================= mətn axtarışı =======================
+
     private fun openSearch() {
-        toast("Axtarış tezliklə")
+        if (renderer == null) return
+        searchBar.visibility = View.VISIBLE
+        searchEt.requestFocus()
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.showSoftInput(searchEt, 0)
+    }
+
+    private fun closeSearch() {
+        searchBar.visibility = View.GONE
+        hits = emptyList()
+        hitIdx = -1
+        searchCount.text = ""
+        pv.hits = emptyList()
+        pv.curHits = emptyList()
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(searchEt.windowToken, 0)
+    }
+
+    private fun runSearch() {
+        val q = searchEt.text.toString()
+        val id = curId ?: return
+        if (q.isBlank()) return
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(searchEt.windowToken, 0)
+        val cached = texts
+        if (cached != null && textsFor == id) {
+            applyHits(PdfOps.search(cached, q))
+            return
+        }
+        searchCount.text = "…"
+        val my = docVer
+        exec.execute {
+            try {
+                val t = PdfOps.extract(store.pdf(id)) { i, n -> runOnUiThread { searchCount.text = "${i + 1}/$n" } }
+                runOnUiThread {
+                    if (my == docVer && id == curId) {
+                        texts = t
+                        textsFor = id
+                        applyHits(PdfOps.search(t, q))
+                    }
+                }
+            } catch (e: Throwable) {
+                runOnUiThread { searchCount.text = "xəta" }
+            }
+        }
+    }
+
+    private fun applyHits(h: List<Hit>) {
+        hits = h
+        if (h.isEmpty()) {
+            hitIdx = -1
+            searchCount.text = "0"
+            pv.hits = emptyList()
+            pv.curHits = emptyList()
+            val noText = texts?.all { it.text.isBlank() } == true
+            toast(if (noText) "Bu PDF-də mətn qatı yoxdur (skan edilmiş ola bilər)" else "Tapılmadı")
+            return
+        }
+        hitIdx = h.indexOfFirst { it.page >= page }.let { if (it < 0) 0 else it }
+        gotoHit()
+    }
+
+    private fun stepHit(d: Int) {
+        if (hits.isEmpty()) {
+            runSearch()
+            return
+        }
+        hitIdx = (hitIdx + d + hits.size) % hits.size
+        gotoHit()
+    }
+
+    private fun gotoHit() {
+        val h = hits.getOrNull(hitIdx) ?: return
+        searchCount.text = "${hitIdx + 1}/${hits.size}"
+        if (h.page != page) showPage(h.page) else applyPageHits()
+    }
+
+    private fun applyPageHits() {
+        if (hits.isEmpty()) {
+            pv.hits = emptyList()
+            pv.curHits = emptyList()
+            return
+        }
+        val cur = hits.getOrNull(hitIdx)
+        pv.hits = hits.filter { it.page == page && it !== cur }.flatMap { it.rects }
+        pv.curHits = if (cur != null && cur.page == page) cur.rects else emptyList()
+    }
+
+    private fun buildSearchBar(): LinearLayout {
+        val bar = LinearLayout(this)
+        bar.orientation = LinearLayout.HORIZONTAL
+        bar.gravity = Gravity.CENTER_VERTICAL
+        bar.background = rounded(0xF2101A2E.toInt(), dpf(22f), Ui.GOLD, dp(1))
+        bar.elevation = dpf(10f)
+        bar.setPadding(dp(12), 0, dp(4), 0)
+        bar.addView(tintedIcon(R.drawable.ic_search, Ui.GOLD, 20))
+        searchEt = EditText(this)
+        searchEt.hint = "Mətndə axtar…"
+        searchEt.setTextColor(Ui.TEXT)
+        searchEt.setHintTextColor(Ui.DIM)
+        searchEt.background = null
+        searchEt.textSize = 15f
+        searchEt.isSingleLine = true
+        searchEt.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+        searchEt.setOnEditorActionListener { _, _, _ ->
+            hits = emptyList()
+            runSearch()
+            true
+        }
+        searchEt.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {
+                hits = emptyList()
+                searchCount.text = ""
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        bar.addView(searchEt, LinearLayout.LayoutParams(0, WC, 1f))
+        searchCount = label("", 12f, Ui.DIM, true)
+        searchCount.setPadding(dp(4), 0, dp(4), 0)
+        bar.addView(searchCount)
+        val up = iconButton(R.drawable.ic_chev_l, "Əvvəlki", Ui.TEXT, 36, 8) { stepHit(-1) }
+        up.rotation = 90f
+        val dn = iconButton(R.drawable.ic_chev_r, "Növbəti", Ui.TEXT, 36, 8) { stepHit(1) }
+        dn.rotation = 90f
+        bar.addView(up)
+        bar.addView(dn)
+        bar.addView(iconButton(R.drawable.ic_close, "Bağla", Ui.DIM, 36, 9) { closeSearch() })
+        bar.visibility = View.GONE
+        return bar
     }
 
     private fun jumpDialog() {
