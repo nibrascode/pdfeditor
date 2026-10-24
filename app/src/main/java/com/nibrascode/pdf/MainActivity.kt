@@ -1100,11 +1100,18 @@ class MainActivity : Activity() {
                 installDoc(id, name, fd, r, list, ratios)
             }
         } catch (e: Throwable) {
+            if (e is SecurityException) {
+                runOnUiThread {
+                    dlg.dismiss()
+                    askPassword(id, name, false)
+                }
+                return
+            }
             val fresh = store.recents().none { it.id == id }
             if (fresh) store.pdf(id).delete()
             runOnUiThread {
                 dlg.dismiss()
-                toast(if (e is SecurityException) "Parollu PDF dəstəklənmir" else "PDF açıla bilmədi")
+                toast("PDF açıla bilmədi")
             }
         }
     }
@@ -1293,7 +1300,8 @@ class MainActivity : Activity() {
         try {
             val buf = java.io.ByteArrayOutputStream()
             PdfOps.export(store.pdf(id), snap, buf, only)
-            buf.writeTo(os)
+            val pw = store.password(id)
+            if (pw != null) PdfOps.encrypt(buf.toByteArray(), pw, os) else buf.writeTo(os)
         } catch (e: Throwable) {
             rasterExport(os, snap, only, tv)
         }
@@ -1608,8 +1616,89 @@ class MainActivity : Activity() {
         toast("OCR hazırlanır")
     }
 
+    // ======================= şifrə =======================
+
+    private fun passwordField(): Pair<FrameLayout, EditText> {
+        val et = EditText(this)
+        et.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        et.hint = "Şifrə"
+        et.setTextColor(Ui.TEXT)
+        et.setHintTextColor(Ui.DIM)
+        val box = FrameLayout(this)
+        box.setPadding(dp(22), dp(8), dp(22), 0)
+        box.addView(et, FrameLayout.LayoutParams(MP, WC))
+        return Pair(box, et)
+    }
+
+    private fun askPassword(id: String, name: String, wrong: Boolean) {
+        val (box, et) = passwordField()
+        val d = AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle(if (wrong) "Şifrə səhvdir, yenidən yaz" else "Bu PDF şifrəlidir")
+            .setMessage("«$name» faylını açmaq üçün şifrəni yaz.")
+            .setView(box)
+            .setPositiveButton("Aç") { _, _ -> unlock(id, name, et.text.toString()) }
+            .setNegativeButton("Ləğv et") { _, _ ->
+                if (store.recents().none { it.id == id }) store.pdf(id).delete()
+            }
+            .create()
+        d.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        d.show()
+    }
+
+    private fun unlock(id: String, name: String, pw: String) {
+        val (dlg, _) = progressDialog("Açılır…")
+        exec.execute {
+            val src = store.pdf(id)
+            val tmp = File(store.dir, "tmp_dec_" + System.nanoTime() + ".pdf")
+            try {
+                PdfOps.decrypt(src, pw, tmp)
+                src.delete()
+                if (!tmp.renameTo(src)) {
+                    tmp.copyTo(src, true)
+                    tmp.delete()
+                }
+                store.setPassword(id, pw)
+                loadStored(id, name, dlg)
+                runOnUiThread { toast("Saxlayanda şifrə qorunacaq (Alətlər → Şifrə ilə dəyişə bilərsən)") }
+            } catch (e: Throwable) {
+                tmp.delete()
+                runOnUiThread {
+                    dlg.dismiss()
+                    if (e is com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException) askPassword(id, name, true)
+                    else toast("Bu PDF açıla bilmədi")
+                }
+            }
+        }
+    }
+
     private fun passwordMenu() {
-        toast("Şifrə")
+        val id = curId ?: return
+        val has = store.password(id) != null
+        val acts = ArrayList<Pair<String, () -> Unit>>()
+        acts.add((if (has) "Şifrəni dəyiş" else "Şifrə qoy") to {
+            val (box, et) = passwordField()
+            AlertDialog.Builder(this, R.style.NbDialog)
+                .setTitle("Yeni şifrə")
+                .setMessage("Saxlanan və paylaşılan PDF bu şifrə ilə qorunacaq (AES-256).")
+                .setView(box)
+                .setPositiveButton("OK") { _, _ ->
+                    val p = et.text.toString()
+                    if (p.length < 4) toast("Ən azı 4 simvol") else {
+                        store.setPassword(id, p)
+                        toast("Şifrə təyin olundu — saxlayanda tətbiq olunacaq")
+                    }
+                }
+                .setNegativeButton("Ləğv et", null)
+                .show()
+        })
+        if (has) acts.add("Şifrəni sil (saxlananda şifrəsiz olsun)" to {
+            store.setPassword(id, null)
+            toast("Şifrə silindi — növbəti saxlamada PDF şifrəsiz olacaq")
+        })
+        AlertDialog.Builder(this, R.style.NbDialog)
+            .setTitle(if (has) "Sənəd şifrəlidir" else "Sənəd şifrəsizdir")
+            .setItems(acts.map { it.first }.toTypedArray()) { _, w -> acts[w].second() }
+            .show()
     }
 
     // ======================= menyu =======================

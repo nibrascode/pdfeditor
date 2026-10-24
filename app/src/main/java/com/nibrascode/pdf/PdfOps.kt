@@ -243,6 +243,24 @@ object PdfOps {
         }
     }
 
+    // Şifrəli PDF-i açıb şifrəsiz işçi nüsxə yazır. Səhv şifrədə InvalidPasswordException atır
+    fun decrypt(src: File, pw: String, dest: File) {
+        PDDocument.load(src, pw).use { d ->
+            d.isAllSecurityToBeRemoved = true
+            dest.outputStream().use { d.save(it) }
+        }
+    }
+
+    // Hazır PDF baytlarını AES-256 ilə şifrələyir
+    fun encrypt(bytes: ByteArray, pw: String, out: OutputStream) {
+        PDDocument.load(bytes).use { d ->
+            val pol = com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy(pw, pw, com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission())
+            pol.encryptionKeyLength = 256
+            d.protect(pol)
+            d.save(out)
+        }
+    }
+
     fun pageCount(f: File): Int = PDDocument.load(f).use { it.numberOfPages }
 
     // ---------- mətn axtarışı ----------

@@ -71,7 +71,7 @@ class Store(ctx: Context) {
         ann(id).delete()
         thumb(id).delete()
         dir.listFiles()?.forEach { if (it.name.startsWith(id + "_")) it.delete() }
-        prefs.edit().remove("uri_$id").remove("page_$id").apply()
+        prefs.edit().remove("uri_$id").remove("page_$id").remove("pw_$id").remove("ocr_$id").apply()
     }
 
     // Orijinal faylın ünvanı (üzərinə yazmaq üçün)
@@ -87,6 +87,13 @@ class Store(ctx: Context) {
     }
 
     fun lastPage(id: String): Int = prefs.getInt("page_$id", 0)
+
+    // Şifrəli sənəd: saxlayanda şifrə yenidən qoyulsun? (yalnız tətbiqin şəxsi yaddaşında)
+    fun setPassword(id: String, pw: String?) {
+        prefs.edit().putString("pw_$id", pw).apply()
+    }
+
+    fun password(id: String): String? = prefs.getString("pw_$id", null)
 
     var signature: String?
         get() = prefs.getString("sig", null)
