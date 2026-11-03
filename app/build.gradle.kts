@@ -14,11 +14,11 @@ android {
 
     defaultConfig {
         applicationId = "com.nibrascode.pdf"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 36
         // İlk Play buraxılışı. Hər yeni Play yükləməsində versionCode-u 1 artır
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
         // Telefonlar üçün kifayətdir; APK həcmini kiçildir (OCR native kitabxanaları)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

@@ -220,4 +220,8 @@
     <string name="hm_empty">Your recent files will appear here</string>
     <string name="hm_empty_sub">Open your first PDF</string>
     <string name="hm_private">Your files stay on your device</string>
+    <string name="giris_rejimi">Writing input</string>
+    <string name="giris_her_ikisi">Pen and finger</string>
+    <string name="giris_qelem">Pen only (finger scrolls)</string>
+    <string name="giris_barmaq">Finger only (pen scrolls)</string>
 </resources>

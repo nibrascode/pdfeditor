@@ -219,4 +219,8 @@
     <string name="hm_empty">ستظهر ملفاتك الأخيرة هنا</string>
     <string name="hm_empty_sub">افتح أول ملف PDF</string>
     <string name="hm_private">ملفاتك تبقى على جهازك</string>
+    <string name="giris_rejimi">طريقة الكتابة</string>
+    <string name="giris_her_ikisi">القلم والإصبع</string>
+    <string name="giris_qelem">القلم فقط (الإصبع للتمرير)</string>
+    <string name="giris_barmaq">الإصبع فقط (القلم للتمرير)</string>
 </resources>

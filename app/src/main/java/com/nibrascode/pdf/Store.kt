@@ -70,6 +70,7 @@ class Store(ctx: Context) {
         pdf(id).delete()
         ann(id).delete()
         thumb(id).delete()
+        File(dir, "$id.ratios").delete()
         dir.listFiles()?.forEach { if (it.name.startsWith(id + "_")) it.delete() }
         prefs.edit().remove("uri_$id").remove("page_$id").remove("pw_$id").remove("ocr_$id").apply()
     }
@@ -130,4 +131,35 @@ class Store(ctx: Context) {
         set(v) {
             prefs.edit().putBoolean("night", v).apply()
         }
+
+    // 0 = qələm və barmaq, 1 = yalnız qələm, 2 = yalnız barmaq
+    var inputMode: Int
+        get() = prefs.getInt("input_mode", 0)
+        set(v) {
+            prefs.edit().putInt("input_mode", v).apply()
+        }
+
+    // Səhifə nisbətlərinin keşi (böyük PDF-lər tez açılsın)
+    fun ratios(id: String, n: Int): FloatArray? {
+        return try {
+            val f = File(dir, "$id.ratios")
+            val pf = pdf(id)
+            if (!f.exists()) return null
+            val lines = f.readText().split("\n")
+            if (lines.size < 2 || lines[0] != "${pf.length()}:${pf.lastModified()}") return null
+            val parts = lines[1].split(",")
+            if (parts.size != n) return null
+            FloatArray(n) { parts[it].toFloat() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveRatios(id: String, r: FloatArray) {
+        try {
+            val pf = pdf(id)
+            File(dir, "$id.ratios").writeText("${pf.length()}:${pf.lastModified()}\n" + r.joinToString(","))
+        } catch (e: Exception) {
+        }
+    }
 }

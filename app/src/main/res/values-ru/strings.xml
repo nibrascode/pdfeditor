@@ -219,4 +219,8 @@
     <string name="hm_empty">Здесь появятся недавние файлы</string>
     <string name="hm_empty_sub">Откройте первый PDF</string>
     <string name="hm_private">Файлы остаются на устройстве</string>
+    <string name="giris_rejimi">Способ ввода</string>
+    <string name="giris_her_ikisi">Стилус и палец</string>
+    <string name="giris_qelem">Только стилус (палец прокручивает)</string>
+    <string name="giris_barmaq">Только палец (стилус прокручивает)</string>
 </resources>

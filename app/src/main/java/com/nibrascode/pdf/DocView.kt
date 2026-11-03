@@ -22,6 +22,8 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 // Nibras Office: davamlı şaquli oxuyucu: səhifələr alt-alta, tənbəl render, bütöv sütunun yaxınlaşdırılması
+const val PAN_MIN_SCALE = 1.6f
+
 class DocView(ctx: Context) : View(ctx) {
     var tool = TL_VIEW
         set(v) {
@@ -34,6 +36,11 @@ class DocView(ctx: Context) : View(ctx) {
     var shape = 0
     // Marker: false = sərbəst (barmaq yolu ilə), true = düz xətt
     var hlStraight = false
+    // 0 = qələm+barmaq, 1 = yalnız qələm (barmaq sürüşdürür), 2 = yalnız barmaq
+    var inputMode = 0
+    // Bu toxunuş yazmaq yox, sürüşdürmək üçündür (giriş rejiminə görə)
+    private var navGesture = false
+    private fun nav() = tool == TL_VIEW || navGesture
     var night = false
         set(v) {
             field = v
@@ -137,18 +144,18 @@ class DocView(ctx: Context) : View(ctx) {
         override fun onDown(e: MotionEvent): Boolean = true
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            if (tool == TL_VIEW) onTap?.invoke()
+            if (nav()) onTap?.invoke()
             return true
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            if (tool != TL_VIEW) return false
+            if (!nav()) return false
             animateZoom(if (scale > 1.3f) 1f else 2.4f, e.x, e.y)
             return true
         }
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
-            if (tool != TL_VIEW || multi) return false
+            if (!nav() || multi) return false
             sx += dx
             sy += dy
             clamp()
@@ -158,7 +165,7 @@ class DocView(ctx: Context) : View(ctx) {
         }
 
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-            if (tool != TL_VIEW || multi) return false
+            if (!nav() || multi) return false
             val (minX, maxX) = xRange()
             scroller.fling(sx.toInt(), sy.toInt(), -vx.toInt(), -vy.toInt(), minX.toInt(), maxX.toInt(), yMin().toInt(), yMax().toInt())
             postInvalidateOnAnimation()
@@ -199,6 +206,25 @@ class DocView(ctx: Context) : View(ctx) {
     }
 
     fun pageCount(): Int = ratios.size
+
+    // Arxa fonda dəqiq nisbətlər gələndə: cari yeri saxlayaraq yenidən yerləşdir
+    fun updateRatios(r: FloatArray) {
+        if (r.size != ratios.size || tops.isEmpty() || width == 0) {
+            if (r.size == ratios.size) ratios = r
+            return
+        }
+        val cp = currentPage.coerceIn(0, tops.size - 1)
+        val off = (sy + padT) / scale - tops[cp]
+        val changed = ArrayList<Int>()
+        for (i in r.indices) if (abs(r[i] - ratios[i]) > 0.002f) changed.add(i)
+        if (changed.isEmpty()) return
+        ratios = r
+        relayout()
+        sy = (tops[cp] + off) * scale - padT
+        clamp()
+        for (i in changed) { bmps.remove(i); pending.remove(i) }
+        invalidate()
+    }
 
     fun setPads(t: Int, b: Int) {
         padT = t.toFloat()
@@ -262,9 +288,15 @@ class DocView(ctx: Context) : View(ctx) {
         totalH = y
     }
 
+    // Adi/az böyüdəndə səhifə ortada sabit qalır; yalnız çox böyüdəndə sağa-sola çəkmək olur
     private fun xRange(): Pair<Float, Float> {
         val cw = width * scale
-        return if (cw <= width) Pair(0f, 0f) else Pair(0f, cw - width)
+        if (cw <= width) return Pair(0f, 0f)
+        if (scale < PAN_MIN_SCALE) {
+            val c = (cw - width) / 2f
+            return Pair(c, c)
+        }
+        return Pair(0f, cw - width)
     }
 
     private fun yMin(): Float = -padT
@@ -491,10 +523,13 @@ class DocView(ctx: Context) : View(ctx) {
         sgd.onTouchEvent(e)
         if (e.actionMasked == MotionEvent.ACTION_DOWN) {
             multi = false
+            val tt = e.getToolType(0)
+            val pen = tt == MotionEvent.TOOL_TYPE_STYLUS || tt == MotionEvent.TOOL_TYPE_ERASER
+            navGesture = tool != TL_VIEW && ((inputMode == 1 && !pen) || (inputMode == 2 && pen))
             anim?.cancel()
             if (!scroller.isFinished) scroller.forceFinished(true)
         }
-        if (tool == TL_VIEW) {
+        if (nav()) {
             if (e.pointerCount >= 2) multi = true
             gd.onTouchEvent(e)
             if (e.pointerCount >= 2) twoFinger(e)

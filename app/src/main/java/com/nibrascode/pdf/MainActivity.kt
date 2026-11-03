@@ -169,6 +169,7 @@ class MainActivity : Activity() {
             ins
         }
         pv.night = store.night
+        pv.inputMode = store.inputMode
         styleNight()
         styleTools()
         refreshHome()
@@ -1201,6 +1202,12 @@ class MainActivity : Activity() {
         val name = queryName(uri) ?: "document.pdf"
         exec.execute {
             try {
+                val quick = try { quickImport(uri) } catch (e: Throwable) { null }
+                if (quick != null) {
+                    store.setUri(quick, writeUri?.toString())
+                    loadStored(quick, name, dlg)
+                    return@execute
+                }
                 val inp = contentResolver.openInputStream(uri) ?: throw IOException("null stream")
                 val md = MessageDigest.getInstance("SHA-1")
                 val tmp = File(store.dir, "tmp_" + System.nanoTime())
@@ -1219,6 +1226,49 @@ class MainActivity : Activity() {
                     dlg.dismiss()
                     toast(tr(R.string.pdf_acila_bilmedi))
                 }
+            }
+        }
+    }
+
+    // Böyük fayllar üçün sürətli yol: bütün faylı hash etmək əvəzinə ölçü + baş/son 1 MB.
+    // Fayl artıq cihazda varsa heç kopyalanmır. exec thread-də
+    private fun quickImport(uri: Uri): String? {
+        val src = contentResolver.openFileDescriptor(uri, "r") ?: return null
+        src.use { pf ->
+            val size = pf.statSize
+            if (size <= 0) return null
+            java.io.FileInputStream(pf.fileDescriptor).use { fis ->
+                val ch = fis.channel
+                val md = MessageDigest.getInstance("SHA-1")
+                md.update(size.toString().toByteArray())
+                val chunk = 1L shl 20
+                fun hashAt(pos: Long, len: Long) {
+                    val buf = java.nio.ByteBuffer.allocate(len.toInt())
+                    ch.position(pos)
+                    while (buf.hasRemaining()) { if (ch.read(buf) < 0) break }
+                    buf.flip()
+                    md.update(buf)
+                }
+                hashAt(0, minOf(chunk, size))
+                if (size > chunk) hashAt(maxOf(chunk, size - chunk), minOf(chunk, size - chunk))
+                val id = "q" + md.digest().joinToString("") { b -> "%02x".format(b) }.substring(0, 15)
+                val dest = store.pdf(id)
+                if (dest.exists() && dest.length() == size) return id
+                val tmp = File(store.dir, "tmp_" + System.nanoTime())
+                ch.position(0)
+                java.io.FileOutputStream(tmp).use { o ->
+                    val oc = o.channel
+                    var done = 0L
+                    while (done < size) {
+                        val k = ch.transferTo(done, size - done, oc)
+                        if (k <= 0) break
+                        done += k
+                    }
+                }
+                if (tmp.length() != size) { tmp.delete(); return null }
+                dest.delete()
+                if (!tmp.renameTo(dest)) { tmp.delete(); return null }
+                return id
             }
         }
     }
@@ -1246,7 +1296,8 @@ class MainActivity : Activity() {
                 throw e
             }
             val n = r.pageCount
-            val ratios = pageRatios(r)
+            val cached = store.ratios(id, n)
+            val ratios = cached ?: quickRatios(r)
             val list = ArrayList<PageData>()
             repeat(n) { list.add(PageData()) }
             try {
@@ -1257,6 +1308,9 @@ class MainActivity : Activity() {
             runOnUiThread {
                 dlg.dismiss()
                 installDoc(id, name, fd, r, list, ratios)
+                if (cached == null && renderer === r) {
+                    if (n <= QUICK_PAGES) store.saveRatios(id, ratios) else scheduleRatios(r, id, ratios.copyOf(), QUICK_PAGES, docVer)
+                }
             }
         } catch (e: Throwable) {
             if (e is SecurityException) {
@@ -1325,6 +1379,44 @@ class MainActivity : Activity() {
             pg.close()
         }
         return out
+    }
+
+    // İlk bir neçə səhifənin dəqiq nisbəti; qalanları birinci səhifəyə bərabər götürülür (sonra arxa fonda düzəlir)
+    private fun quickRatios(r: PdfRenderer): FloatArray {
+        val n = r.pageCount
+        val out = FloatArray(n)
+        val k = minOf(n, QUICK_PAGES)
+        for (i in 0 until k) {
+            val pg = r.openPage(i)
+            out[i] = pg.height.toFloat() / max(1, pg.width)
+            pg.close()
+        }
+        for (i in k until n) out[i] = out[k - 1]
+        return out
+    }
+
+    // Qalan səhifələrin nisbətləri kiçik hissələrlə — render növbəsini bloklamır
+    private fun scheduleRatios(r: PdfRenderer, id: String, arr: FloatArray, from: Int, ver: Int) {
+        exec.execute {
+            if (ver != docVer || r !== renderer) return@execute
+            val to = minOf(arr.size, from + 30)
+            try {
+                for (i in from until to) {
+                    val pg = r.openPage(i)
+                    arr[i] = pg.height.toFloat() / max(1, pg.width)
+                    pg.close()
+                }
+            } catch (e: Throwable) {
+                return@execute
+            }
+            if (to < arr.size) {
+                scheduleRatios(r, id, arr, to, ver)
+            } else {
+                store.saveRatios(id, arr)
+                val snap = arr.copyOf()
+                runOnUiThread { if (ver == docVer && r === renderer) pv.updateRatios(snap) }
+            }
+        }
     }
 
     private fun resetDocState() {
@@ -2043,6 +2135,23 @@ class MainActivity : Activity() {
         row(g1, R.drawable.ln_moon, tr(R.string.gece_rejimi), tr(R.string.gece_rejimi_alt), nsw) { nsw.toggle() }
         val fsw = switch(store.fullscreen) { v -> store.fullscreen = v }
         row(g1, R.drawable.ln_expand, tr(R.string.tam_ekranda_ac), tr(R.string.tam_ekranda_ac_alt), fsw) { fsw.toggle() }
+
+        // Qələm / barmaq ilə yazma
+        var inSub: TextView? = null
+        val inNames = intArrayOf(R.string.giris_her_ikisi, R.string.giris_qelem, R.string.giris_barmaq)
+        inSub = row(g1, R.drawable.ln_pen, tr(R.string.giris_rejimi), tr(inNames[store.inputMode.coerceIn(0, 2)])) {
+            val items = inNames.map { tr(it) }.toTypedArray()
+            AlertDialog.Builder(this, R.style.NbDialog)
+                .setTitle(tr(R.string.giris_rejimi))
+                .setSingleChoiceItems(items, store.inputMode.coerceIn(0, 2)) { d, w ->
+                    store.inputMode = w
+                    if (::pv.isInitialized) pv.inputMode = w
+                    inSub?.text = items[w]
+                    d.dismiss()
+                }
+                .setNegativeButton(tr(R.string.legv_et), null)
+                .show()
+        }
 
         // Sənədlər
         val g2 = group(tr(R.string.senedler))
@@ -2937,3 +3046,5 @@ class MainActivity : Activity() {
             .show()
     }
 }
+
+private const val QUICK_PAGES = 4

@@ -219,4 +219,8 @@
     <string name="hm_empty">Son faylların burada görünəcək</string>
     <string name="hm_empty_sub">İlk PDF-ini aç</string>
     <string name="hm_private">Faylların cihazında qalır</string>
+    <string name="giris_rejimi">Yazma üsulu</string>
+    <string name="giris_her_ikisi">Qələm və barmaq</string>
+    <string name="giris_qelem">Yalnız qələm (barmaq sürüşdürür)</string>
+    <string name="giris_barmaq">Yalnız barmaq (qələm sürüşdürür)</string>
 </resources>
