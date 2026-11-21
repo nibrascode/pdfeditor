@@ -149,6 +149,7 @@ class MainActivity : Activity() {
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         store = Store(this)
+        loadToolPrefs()
         PdfOps.init(this)
         ImgCache.dir = store.dir
         try {
@@ -737,6 +738,7 @@ class MainActivity : Activity() {
             val b = iconButton(res, shapeDescs[i], Ui.ICON, 44, 10) {
                 shape = i
                 pv.shape = i
+                store.shape = i
                 refreshShapeBtns()
             }
             val lp = b.layoutParams as LinearLayout.LayoutParams
@@ -752,6 +754,7 @@ class MainActivity : Activity() {
             val v = View(this)
             v.setOnClickListener {
                 toolInk[tool] = c
+                store.setToolInk(tool, c)
                 pv.ink = c
                 preview.ink = c
                 preview.invalidate()
@@ -796,8 +799,12 @@ class MainActivity : Activity() {
         val sw = android.widget.Switch(this)
         sw.thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Ui.ACCENT, 0xFFFAFAFA.toInt()))
         sw.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Ui.GOLD, 0x33000000))
+        pv.hlStraight = store.hlStraight
         sw.isChecked = pv.hlStraight
-        sw.setOnCheckedChangeListener { _, on -> pv.hlStraight = on }
+        sw.setOnCheckedChangeListener { _, on ->
+            pv.hlStraight = on
+            store.hlStraight = on
+        }
         hlRow.addView(sw)
         panel.addView(hlRow, LinearLayout.LayoutParams(MP, WC))
     }
@@ -894,7 +901,17 @@ class MainActivity : Activity() {
     }
 
     private fun toggleAnnot() {
-        if (annot) exitAnnot() else enterAnnot(TL_PEN)
+        // Qələm düyməsi: əvvəlki alət və onun rəng/qalınlıq ayarları ilə açılır
+        if (annot) exitAnnot() else enterAnnot(store.lastTool)
+    }
+
+    // Saxlanmış alət ayarlarını yüklə (toolInk/toolAmt default dəyərləri ehtiyat kimi qalır)
+    private fun loadToolPrefs() {
+        for (t in toolInk.indices) {
+            if (toolInk[t] != 0) toolInk[t] = store.toolInk(t, toolInk[t])
+            if (toolAmt[t] != 0f) toolAmt[t] = store.toolAmt(t, toolAmt[t]).coerceIn(0f, 1f)
+        }
+        shape = store.shape.coerceIn(0, 3)
     }
 
     private fun enterAnnot(t: Int) {
@@ -952,6 +969,7 @@ class MainActivity : Activity() {
     private fun setTool(t: Int) {
         tool = t
         pv.tool = t
+        if (t != TL_VIEW) store.lastTool = t
         if ((t >= TL_PEN && t <= TL_SHAPE) || t == TL_NOTE) {
             pv.ink = toolInk[t]
             pv.amount = toolAmt[t]
@@ -1050,6 +1068,7 @@ class MainActivity : Activity() {
 
     private fun setAmount(v: Float) {
         toolAmt[tool] = v
+        store.setToolAmt(tool, v)
         pv.amount = v
         preview.amount = v
         preview.invalidate()

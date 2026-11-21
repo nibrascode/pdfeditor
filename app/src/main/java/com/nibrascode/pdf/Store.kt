@@ -139,6 +139,39 @@ class Store(ctx: Context) {
             prefs.edit().putInt("input_mode", v).apply()
         }
 
+    // Alət yaddaşı: qələm/marker/fiqur üçün son rəng, qalınlıq, fiqur növü, düz marker və son alət
+    // (tətbiq yenidən açılanda da əvvəlki seçimlərlə açılsın)
+    fun toolInk(t: Int, def: Int): Int = prefs.getInt("tool_ink_$t", def)
+
+    fun toolAmt(t: Int, def: Float): Float = prefs.getFloat("tool_amt_$t", def)
+
+    fun setToolInk(t: Int, c: Int) {
+        prefs.edit().putInt("tool_ink_$t", c).apply()
+    }
+
+    fun setToolAmt(t: Int, v: Float) {
+        prefs.edit().putFloat("tool_amt_$t", v).apply()
+    }
+
+    var shape: Int
+        get() = prefs.getInt("tool_shape", 0)
+        set(v) {
+            prefs.edit().putInt("tool_shape", v).apply()
+        }
+
+    var hlStraight: Boolean
+        get() = prefs.getBoolean("hl_straight", false)
+        set(v) {
+            prefs.edit().putBoolean("hl_straight", v).apply()
+        }
+
+    // Qələm düyməsinə basanda açılacaq alət (TL_VIEW olmur)
+    var lastTool: Int
+        get() = prefs.getInt("last_tool", TL_PEN).let { if (it == TL_VIEW || it !in TL_PEN..TL_SELECT) TL_PEN else it }
+        set(v) {
+            if (v != TL_VIEW) prefs.edit().putInt("last_tool", v).apply()
+        }
+
     // Səhifə nisbətlərinin keşi (böyük PDF-lər tez açılsın)
     fun ratios(id: String, n: Int): FloatArray? {
         return try {

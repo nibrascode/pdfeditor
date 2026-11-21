@@ -22,7 +22,6 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 // Nibras Office: davamlı şaquli oxuyucu: səhifələr alt-alta, tənbəl render, bütöv sütunun yaxınlaşdırılması
-const val PAN_MIN_SCALE = 1.6f
 
 class DocView(ctx: Context) : View(ctx) {
     var tool = TL_VIEW
@@ -99,6 +98,9 @@ class DocView(ctx: Context) : View(ctx) {
     private var dragNX = 0f
     private var dragNY = 0f
     private var multi = false
+    // Bir barmaqla sürüşdürmə jestinin oxu (Geom.AXIS_*)
+    private var axis = Geom.AXIS_NONE
+    private val slop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop.toFloat()
     private var moved = false
     private var downX = 0f
     private var downY = 0f
@@ -156,7 +158,9 @@ class DocView(ctx: Context) : View(ctx) {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             if (!nav() || multi) return false
-            sx += dx
+            if (axis == Geom.AXIS_NONE && e1 != null) axis = Geom.gestureAxis(e2.x - e1.x, e2.y - e1.y, slop)
+            // Şaquli oxunuşda səhifə sağa-sola qaçmasın (üfüqi yalnız üfüqi/diaqonal jestdə)
+            if (axis == Geom.AXIS_FREE) sx += dx
             sy += dy
             clamp()
             onScrollState?.invoke(true)
@@ -167,7 +171,8 @@ class DocView(ctx: Context) : View(ctx) {
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
             if (!nav() || multi) return false
             val (minX, maxX) = xRange()
-            scroller.fling(sx.toInt(), sy.toInt(), -vx.toInt(), -vy.toInt(), minX.toInt(), maxX.toInt(), yMin().toInt(), yMax().toInt())
+            val fx = if (axis == Geom.AXIS_FREE && minX < maxX) vx else 0f
+            scroller.fling(sx.toInt(), sy.toInt(), -fx.toInt(), -vy.toInt(), minX.toInt(), maxX.toInt(), yMin().toInt(), yMax().toInt())
             postInvalidateOnAnimation()
             return true
         }
@@ -288,16 +293,9 @@ class DocView(ctx: Context) : View(ctx) {
         totalH = y
     }
 
-    // Adi/az böyüdəndə səhifə ortada sabit qalır; yalnız çox böyüdəndə sağa-sola çəkmək olur
-    private fun xRange(): Pair<Float, Float> {
-        val cw = width * scale
-        if (cw <= width) return Pair(0f, 0f)
-        if (scale < PAN_MIN_SCALE) {
-            val c = (cw - width) / 2f
-            return Pair(c, c)
-        }
-        return Pair(0f, cw - width)
-    }
+    // Səhifə ekrana sığanda ortada sabit qalır; yalnız ekran enindən çox böyüdəndə
+    // səhifənin kənarlarına qədər sağa-sola çəkmək olur (boz sahəyə qaçmır)
+    private fun xRange(): Pair<Float, Float> = Geom.xPanRange(width.toFloat(), baseW, scale, 8f * dn)
 
     private fun yMin(): Float = -padT
 
@@ -523,6 +521,7 @@ class DocView(ctx: Context) : View(ctx) {
         sgd.onTouchEvent(e)
         if (e.actionMasked == MotionEvent.ACTION_DOWN) {
             multi = false
+            axis = Geom.AXIS_NONE
             val tt = e.getToolType(0)
             val pen = tt == MotionEvent.TOOL_TYPE_STYLUS || tt == MotionEvent.TOOL_TYPE_ERASER
             navGesture = tool != TL_VIEW && ((inputMode == 1 && !pen) || (inputMode == 2 && pen))

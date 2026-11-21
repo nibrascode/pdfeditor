@@ -35,4 +35,29 @@ object Geom {
     }
 
     fun apply(m: FloatArray, u: Float, v: Float): Pair<Float, Float> = Pair(m[0] * u + m[2] * v + m[4], m[1] * u + m[3] * v + m[5])
+
+    // Üfüqi sürüşdürmə həddi (sx üçün [min, max]).
+    // viewW: ekran eni, baseW: scale=1-də səhifə eni (ortalanmış), margin: səhifə kənarında boşluq.
+    // Səhifə (kənar boşluqları ilə) ekrana sığırsa üfüqi hərəkət bağlıdır, səhifə ortada qalır.
+    // Böyüdəndə yalnız səhifənin kənarlarına qədər (boz sahəyə qaçmadan) sürüşdürmək olar.
+    fun xPanRange(viewW: Float, baseW: Float, scale: Float, margin: Float): Pair<Float, Float> {
+        val center = viewW * (scale - 1f) / 2f
+        val pw = baseW * scale
+        if (pw + 2f * margin <= viewW + 0.5f) return Pair(center, center)
+        val left = (viewW - baseW) / 2f * scale - margin
+        val right = left + pw + 2f * margin - viewW
+        return Pair(left, right)
+    }
+
+    // Jest oxu: şaquli üstünlük təşkil edirsə üfüqi hərəkət bu jest boyu kilidlənir
+    const val AXIS_NONE = 0
+    const val AXIS_VERTICAL = 1
+    const val AXIS_FREE = 2
+
+    fun gestureAxis(totalDx: Float, totalDy: Float, slop: Float): Int {
+        val ax = kotlin.math.abs(totalDx)
+        val ay = kotlin.math.abs(totalDy)
+        if (ax < slop && ay < slop) return AXIS_NONE
+        return if (ay >= ax * 1.2f) AXIS_VERTICAL else AXIS_FREE
+    }
 }
