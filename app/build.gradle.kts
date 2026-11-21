@@ -17,8 +17,8 @@ android {
         minSdk = 24
         targetSdk = 36
         // İlk Play buraxılışı. Hər yeni Play yükləməsində versionCode-u 1 artır
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
         // Telefonlar üçün kifayətdir; APK həcmini kiçildir (OCR native kitabxanaları)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

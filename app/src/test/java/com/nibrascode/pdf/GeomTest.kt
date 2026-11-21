@@ -60,4 +60,44 @@ class GeomTest {
         pd.doUndo(); assertTrue(pd.anns.isEmpty())
         pd.doRedo(); pd.doRedo(); near(a.p[0], 0.5f)
     }
+
+    // Telefon (portret): ekran 1080, səhifə eni 1080-2*24, kənar 24
+    @Test fun panLockedAtFitWidth() {
+        val (a, b) = Geom.xPanRange(1080f, 1032f, 1f, 24f)
+        near(a, 0f); near(b, 0f)
+    }
+
+    @Test fun panLockedWhenPageNarrowerThanScreen() {
+        // Planşet/landşaft: səhifə ekrandan dar, 1.6x-də də ekrana sığır -> ortada sabit
+        val (a, b) = Geom.xPanRange(2000f, 900f, 1.6f, 24f)
+        near(a, b)
+        near(a, 2000f * 0.6f / 2f) // səhifə mərkəzi ekran mərkəzində
+    }
+
+    @Test fun panClampedToPageEdgesWhenZoomed() {
+        val viewW = 1080f; val baseW = 1032f; val m = 24f; val s = 2f
+        val (a, b) = Geom.xPanRange(viewW, baseW, s, m)
+        assertTrue(a < b)
+        // sx=a -> səhifənin sol kənarı ekranda m qədər boşluqla görünür
+        val leftAtMin = (viewW - baseW) / 2f * s - a
+        near(leftAtMin, m)
+        // sx=b -> səhifənin sağ kənarı ekranın sağından m içəridə
+        val rightAtMax = (viewW - baseW) / 2f * s + baseW * s - b
+        near(rightAtMax, viewW - m)
+    }
+
+    @Test fun landscapeZoomDoesNotRunIntoGreyArea() {
+        // Köhnə davranış: 0..cw-viewW (boz sahə daxil). Yeni: yalnız səhifə kənarları
+        val viewW = 2000f; val baseW = 900f; val m = 24f; val s = 3f
+        val (a, b) = Geom.xPanRange(viewW, baseW, s, m)
+        assertTrue(a > 0f)
+        assertTrue(b < viewW * s - viewW)
+        near(b - a, baseW * s + 2 * m - viewW)
+    }
+
+    @Test fun verticalGestureLocksHorizontal() {
+        assertEquals(Geom.AXIS_VERTICAL, Geom.gestureAxis(12f, 80f, 16f))
+        assertEquals(Geom.AXIS_FREE, Geom.gestureAxis(80f, 10f, 16f))
+        assertEquals(Geom.AXIS_NONE, Geom.gestureAxis(3f, 4f, 16f))
+    }
 }
